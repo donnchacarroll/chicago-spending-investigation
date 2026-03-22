@@ -415,6 +415,38 @@ function YoYTable({ data }: { data: YoYResponse }) {
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          {(() => {
+            const yearTotals: Record<string, number> = {};
+            for (const y of years) {
+              yearTotals[String(y)] = items.reduce((sum, item) => sum + (item.by_year[String(y)] ?? 0), 0);
+            }
+            const grandTotal = items.reduce((sum, item) => sum + item.total, 0);
+            const lastTwo = years.slice(-2);
+            const priorTotal = lastTwo.length === 2 ? yearTotals[String(lastTwo[0])] : 0;
+            const latestTotal = lastTwo.length === 2 ? yearTotals[String(lastTwo[1])] : 0;
+            const totalYoY = priorTotal > 0 ? ((latestTotal - priorTotal) / priorTotal) * 100 : null;
+
+            return (
+              <tr className="border-t-2 border-slate-600">
+                <td className="py-2.5 px-3 text-white font-semibold text-sm">Total</td>
+                {years.map((y) => (
+                  <td key={y} className="py-2.5 px-3 text-right text-white font-semibold font-mono text-xs">
+                    {yearTotals[String(y)] > 0 ? formatCompactCurrency(yearTotals[String(y)]) : (
+                      <span className="text-slate-700">-</span>
+                    )}
+                  </td>
+                ))}
+                <td className="py-2.5 px-3 text-right text-white font-bold font-mono text-xs">
+                  {formatCompactCurrency(grandTotal)}
+                </td>
+                <td className="py-2.5 px-3 text-right">
+                  <YoYBadge value={totalYoY !== null ? Math.round(totalYoY * 10) / 10 : null} />
+                </td>
+              </tr>
+            );
+          })()}
+        </tfoot>
       </table>
     </div>
   );
