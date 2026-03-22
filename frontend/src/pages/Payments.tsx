@@ -344,6 +344,36 @@ function PaymentDetailPanel({ payment, onClose }: { payment: Payment; onClose: (
         )}
       </div>
 
+      {/* Inferred Purpose */}
+      {payment.inferred_purpose && payment.inferred_purpose.purpose && (
+        <div className={`mb-5 rounded-lg p-4 ${
+          payment.inferred_purpose.confidence === "high"
+            ? "bg-slate-800/50 border border-slate-700"
+            : "bg-yellow-500/5 border border-yellow-500/20"
+        }`}>
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-sm font-semibold text-slate-300">Likely Purpose</h3>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+              payment.inferred_purpose.confidence === "high"
+                ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                : payment.inferred_purpose.confidence === "medium"
+                ? "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
+                : "bg-slate-700 text-slate-400 border-slate-600"
+            }`}>
+              {payment.inferred_purpose.confidence} confidence
+            </span>
+          </div>
+          <p className="text-sm text-white font-medium mb-1">{payment.inferred_purpose.purpose}</p>
+          <p className="text-xs text-slate-400 mb-2">{payment.inferred_purpose.reasoning}</p>
+          {payment.inferred_purpose.amount_context && (
+            <p className="text-xs text-slate-500 italic mb-2">{payment.inferred_purpose.amount_context}</p>
+          )}
+          <p className="text-[10px] text-slate-600 border-t border-slate-700/50 pt-2 mt-2">
+            {payment.inferred_purpose.disclaimer}
+          </p>
+        </div>
+      )}
+
       {/* Contract details */}
       {hasContract ? (
         <div className="mb-5 bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">

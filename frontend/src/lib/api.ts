@@ -66,6 +66,13 @@ export interface Payment {
   flags?: Array<{ flag_type: string; description: string; risk_score: number }>;
   contract?: PaymentContract | null;
   vendor_context?: { total_payments: number; total_paid: number; avg_payment: number };
+  inferred_purpose?: {
+    purpose: string;
+    confidence: string;
+    reasoning: string;
+    disclaimer: string;
+    amount_context: string | null;
+  };
 }
 
 export interface PaymentsResponse {
@@ -183,6 +190,13 @@ export interface AlertDetail {
     contract_number: string;
   }>;
   explanation: Array<{ title: string; text: string }>;
+  inferred_purpose?: {
+    purpose: string;
+    confidence: string;
+    reasoning: string;
+    disclaimer: string;
+    amount_context: string | null;
+  };
 }
 
 export interface CategorySummary {

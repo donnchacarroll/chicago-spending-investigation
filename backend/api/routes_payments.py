@@ -2,6 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 from backend.api.db import get_db
+from backend.analysis.purpose_inference import infer_purpose
 
 payments_bp = Blueprint("payments_bp", __name__, url_prefix="/api/payments")
 
@@ -226,4 +227,14 @@ def payment_detail(voucher_number):
     payment["flags"] = flags
     payment["contract"] = contract
     payment["vendor_context"] = vendor_context[0] if vendor_context else {}
+
+    # Infer likely purpose
+    payment["inferred_purpose"] = infer_purpose(
+        vendor_name=payment.get("vendor_name", ""),
+        amount=payment.get("amount", 0),
+        contract_type=payment.get("contract_type", ""),
+        dv_subcategory=payment.get("dv_subcategory", ""),
+        spending_category=payment.get("spending_category", ""),
+    )
+
     return jsonify(payment)

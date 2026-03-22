@@ -2,6 +2,7 @@
 
 from flask import Blueprint, jsonify, request
 from backend.api.db import get_db
+from backend.analysis.purpose_inference import infer_purpose
 
 alerts_bp = Blueprint("alerts_bp", __name__, url_prefix="/api/alerts")
 
@@ -176,12 +177,20 @@ def alert_detail(voucher_number):
     # Build a human-readable explanation
     explanation = _build_explanation(alert_rows, payment, group_stats)
 
+    # Infer purpose
+    purpose = infer_purpose(
+        vendor_name=payment.get("vendor_name", ""),
+        amount=payment.get("amount", 0),
+        contract_type=payment.get("contract_type", ""),
+    )
+
     return jsonify({
         "alerts": alert_rows,
         "payment": payment,
         "group_stats": group_stats,
         "comparison_payments": comparison_payments,
         "explanation": explanation,
+        "inferred_purpose": purpose,
     })
 
 
