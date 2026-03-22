@@ -3,12 +3,16 @@ import {
   getContracts,
   getContractDetail,
   getContractsSummary,
+  getRepeatOverspenders,
+  getOverspenderDetail,
 } from "../lib/api";
 import { useDateFilter } from "../lib/DateFilterContext";
 import type {
   ContractsResponse,
   ContractDetail,
   ContractSummary,
+  RepeatOverspendersResponse,
+  OverspenderDetail,
 } from "../lib/api";
 import {
   formatCurrency,
@@ -77,6 +81,12 @@ export default function Contracts() {
   const [detail, setDetail] = useState<ContractDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Repeat overspenders
+  const [showOverspenders, setShowOverspenders] = useState(false);
+  const [overspenders, setOverspenders] = useState<RepeatOverspendersResponse | null>(null);
+  const [overspenderDetail, setOverspenderDetail] = useState<OverspenderDetail | null>(null);
+  const [overspenderLoading, setOverspenderLoading] = useState(false);
+
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState("");
   useEffect(() => {
@@ -86,6 +96,23 @@ export default function Contracts() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  const loadOverspenders = async () => {
+    setShowOverspenders(true);
+    setOverspenderLoading(true);
+    try {
+      const data = await getRepeatOverspenders({ min_contracts: "2", per_page: "50" });
+      setOverspenders(data);
+    } catch { /* ignore */ }
+    finally { setOverspenderLoading(false); }
+  };
+
+  const loadOverspenderDetail = async (vendorName: string) => {
+    try {
+      const data = await getOverspenderDetail(vendorName);
+      setOverspenderDetail(data);
+    } catch { /* ignore */ }
+  };
 
   // Fetch summary once
   useEffect(() => {
@@ -494,6 +521,145 @@ export default function Contracts() {
       ) : (
         <div className="card p-8 text-center text-slate-500">
           No contracts match your filters
+        </div>
+      )}
+
+      {/* Repeat Overspenders Section */}
+      {!showOverspenders && (
+        <div className="mt-6">
+          <button
+            onClick={loadOverspenders}
+            className="card p-4 w-full text-left hover:bg-red-500/5 hover:border-red-500/30 transition-colors"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-red-400">Repeat Overspenders</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Vendors who exceed contract values across multiple contracts — a key fraud signal
+                </p>
+              </div>
+              <span className="text-red-400 text-sm">Investigate &rarr;</span>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {showOverspenders && (
+        <div className="mt-6 card p-5 border-l-2 border-l-red-500/50">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-semibold text-white">Repeat Overspenders</h3>
+              {overspenders && (
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {overspenders.total} vendors with 2+ overspent contracts — {formatCompactCurrency(overspenders.grand_total_excess)} total excess
+                </p>
+              )}
+            </div>
+            <button onClick={() => setShowOverspenders(false)} className="text-slate-500 hover:text-white text-sm">&times; Close</button>
+          </div>
+
+          {overspenderLoading ? (
+            <div className="py-8 text-center">
+              <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-slate-500 text-xs">Analyzing repeat overspenders...</p>
+            </div>
+          ) : overspenders && overspenders.vendors.length > 0 ? (
+            <div className="space-y-2">
+              {overspenders.vendors.map((v) => (
+                <button
+                  key={v.vendor_name}
+                  className="w-full text-left bg-slate-800/50 hover:bg-slate-800 rounded-lg p-3 transition-colors"
+                  onClick={() => loadOverspenderDetail(v.vendor_name)}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white font-medium truncate">{v.vendor_name}</p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                        <span className="text-red-400 font-medium">{v.overspent_contracts} overspent contracts</span>
+                        <span>Avg {v.avg_ratio}x award</span>
+                        <span>Awarded: {formatCompactCurrency(v.total_awarded)}</span>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-red-400 font-bold text-sm">{formatCompactCurrency(v.total_excess)}</p>
+                      <p className="text-[10px] text-slate-500">excess</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-500 text-sm py-4 text-center">No repeat overspenders found</p>
+          )}
+        </div>
+      )}
+
+      {/* Overspender Detail Modal */}
+      {overspenderDetail && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setOverspenderDetail(null)}>
+          <div className="card p-6 max-w-3xl w-full max-h-[85vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">{overspenderDetail.vendor_name}</h2>
+                <p className="text-xs text-red-400 mt-0.5">
+                  {overspenderDetail.total_overspent} overspent contracts — {formatCurrency(overspenderDetail.total_excess)} total excess
+                </p>
+              </div>
+              <button onClick={() => setOverspenderDetail(null)} className="text-slate-500 hover:text-white text-xl">&times;</button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20">
+                <p className="text-lg font-bold text-red-400">{overspenderDetail.total_overspent}</p>
+                <p className="text-[10px] text-slate-500">Overspent Contracts</p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-3">
+                <p className="text-lg font-bold text-slate-200">{overspenderDetail.total_normal}</p>
+                <p className="text-[10px] text-slate-500">Normal Contracts</p>
+              </div>
+              <div className="bg-red-500/10 rounded-lg p-3 border border-red-500/20">
+                <p className="text-lg font-bold text-red-400">{formatCompactCurrency(overspenderDetail.total_excess)}</p>
+                <p className="text-[10px] text-slate-500">Total Excess</p>
+              </div>
+            </div>
+
+            <h3 className="text-sm font-semibold text-red-400 mb-3">Overspent Contracts</h3>
+            <div className="space-y-2 mb-5">
+              {overspenderDetail.overspent_contracts.map((c) => (
+                <div key={c.contract_number} className="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-white font-mono">#{c.contract_number}</span>
+                    <span className="text-red-400 font-bold">{c.ratio}x award</span>
+                  </div>
+                  <div className="h-3 bg-slate-800 rounded-full overflow-hidden mb-2">
+                    <div className="h-full bg-blue-500/60 rounded-full" style={{ width: `${Math.min(100, (c.award_amount / c.total_paid) * 100)}%` }} />
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Award: {formatCurrency(c.award_amount)}</span>
+                    <span className="text-red-400 font-medium">Paid: {formatCurrency(c.total_paid)} (+{formatCurrency(c.total_paid - c.award_amount)})</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 mt-1">
+                    {c.payment_count} payments, {c.first_payment?.split(" ")[0]} to {c.last_payment?.split(" ")[0]}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {overspenderDetail.normal_contracts.length > 0 && (
+              <>
+                <h3 className="text-sm font-semibold text-slate-400 mb-2">Other Contracts (within budget)</h3>
+                <div className="space-y-1 max-h-40 overflow-auto">
+                  {overspenderDetail.normal_contracts.map((c) => (
+                    <div key={c.contract_number} className="flex items-center justify-between bg-slate-800/30 rounded px-3 py-2 text-xs">
+                      <span className="text-slate-400 font-mono">#{c.contract_number}</span>
+                      <span className="text-slate-500">Award: {formatCurrency(c.award_amount)}</span>
+                      <span className="text-emerald-400">Paid: {formatCurrency(c.total_paid)} ({c.ratio}x)</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

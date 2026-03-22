@@ -311,6 +311,122 @@ def contracts_list():
     })
 
 
+@contracts_bp.route("/repeat-overspenders", methods=["GET"])
+def repeat_overspenders():
+    """Vendors who repeatedly exceed contract values across multiple contracts."""
+    min_contracts = request.args.get("min_contracts", 2, type=int)
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 50, type=int)
+    per_page = min(per_page, 100)
+    offset = (page - 1) * per_page
+
+    base_sql = """
+        WITH contract_totals AS (
+            SELECT contract_number, vendor_name, award_amount,
+                   SUM(amount) AS total_paid
+            FROM payment_contract_joined
+            WHERE contract_type = 'contract' AND is_annual_aggregate = false
+              AND award_amount > 0
+            GROUP BY contract_number, vendor_name, award_amount
+            HAVING SUM(amount) > award_amount * 1.1
+        ),
+        vendor_summary AS (
+            SELECT vendor_name,
+                   COUNT(*) AS overspent_contracts,
+                   SUM(total_paid - award_amount) AS total_excess,
+                   SUM(award_amount) AS total_awarded,
+                   SUM(total_paid) AS total_paid,
+                   ROUND(AVG(total_paid / award_amount), 2) AS avg_ratio
+            FROM contract_totals
+            GROUP BY vendor_name
+            HAVING COUNT(*) >= $1
+        )
+    """
+
+    count_rows = _safe_query(
+        f"{base_sql} SELECT COUNT(*) AS total FROM vendor_summary",
+        [min_contracts],
+    )
+    total = count_rows[0]["total"] if count_rows else 0
+
+    vendors = _safe_query(
+        f"""{base_sql}
+        SELECT * FROM vendor_summary
+        ORDER BY total_excess DESC
+        LIMIT $2 OFFSET $3""",
+        [min_contracts, per_page, offset],
+    )
+
+    # Total excess across all repeat overspenders
+    totals = _safe_query(
+        f"""{base_sql}
+        SELECT SUM(total_excess) AS grand_excess,
+               SUM(overspent_contracts) AS grand_contracts
+        FROM vendor_summary""",
+        [min_contracts],
+    )
+
+    return jsonify({
+        "vendors": vendors,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+        "grand_total_excess": float(totals[0]["grand_excess"] or 0) if totals else 0,
+        "grand_total_contracts": int(totals[0]["grand_contracts"] or 0) if totals else 0,
+    })
+
+
+@contracts_bp.route("/repeat-overspenders/<vendor_name>", methods=["GET"])
+def overspender_detail(vendor_name):
+    """Detail for a specific repeat overspender — all their overspent contracts."""
+    contracts = _safe_query(
+        """
+        SELECT contract_number, award_amount, SUM(amount) AS total_paid,
+               ROUND(SUM(amount) / award_amount, 2) AS ratio,
+               MIN(check_date) AS first_payment, MAX(check_date) AS last_payment,
+               COUNT(*) AS payment_count
+        FROM payment_contract_joined
+        WHERE vendor_name = $1 AND contract_type = 'contract'
+          AND is_annual_aggregate = false AND award_amount > 0
+        GROUP BY contract_number, award_amount
+        HAVING SUM(amount) > award_amount * 1.1
+        ORDER BY (SUM(amount) - award_amount) DESC
+        """,
+        [vendor_name],
+    )
+    for row in contracts:
+        _serialize_row(row)
+
+    # Also get their non-overspent contracts for context
+    normal = _safe_query(
+        """
+        SELECT contract_number, award_amount, SUM(amount) AS total_paid,
+               ROUND(SUM(amount) / NULLIF(award_amount, 0), 2) AS ratio,
+               COUNT(*) AS payment_count
+        FROM payment_contract_joined
+        WHERE vendor_name = $1 AND contract_type = 'contract'
+          AND is_annual_aggregate = false AND award_amount > 0
+        GROUP BY contract_number, award_amount
+        HAVING SUM(amount) <= award_amount * 1.1
+        ORDER BY total_paid DESC
+        """,
+        [vendor_name],
+    )
+
+    return jsonify({
+        "vendor_name": vendor_name,
+        "overspent_contracts": contracts,
+        "normal_contracts": normal,
+        "total_overspent": len(contracts),
+        "total_normal": len(normal),
+        "total_excess": sum(
+            (c.get("total_paid", 0) - c.get("award_amount", 0))
+            for c in contracts
+        ),
+    })
+
+
 @contracts_bp.route("/<contract_number>", methods=["GET"])
 def contract_detail(contract_number):
     """Full detail for a single contract including payments and monthly spending."""

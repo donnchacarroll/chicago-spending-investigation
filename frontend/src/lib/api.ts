@@ -458,6 +458,56 @@ export function getContractDetail(contractNumber: string) {
   return fetchApi<ContractDetail>(`/contracts/${encodeURIComponent(contractNumber)}`);
 }
 
+export interface RepeatOverspender {
+  vendor_name: string;
+  overspent_contracts: number;
+  total_excess: number;
+  total_awarded: number;
+  total_paid: number;
+  avg_ratio: number;
+}
+
+export interface RepeatOverspendersResponse {
+  vendors: RepeatOverspender[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+  grand_total_excess: number;
+  grand_total_contracts: number;
+}
+
+export interface OverspenderDetail {
+  vendor_name: string;
+  overspent_contracts: Array<{
+    contract_number: string;
+    award_amount: number;
+    total_paid: number;
+    ratio: number;
+    first_payment: string;
+    last_payment: string;
+    payment_count: number;
+  }>;
+  normal_contracts: Array<{
+    contract_number: string;
+    award_amount: number;
+    total_paid: number;
+    ratio: number;
+    payment_count: number;
+  }>;
+  total_overspent: number;
+  total_normal: number;
+  total_excess: number;
+}
+
+export function getRepeatOverspenders(params?: Record<string, string>) {
+  return fetchApi<RepeatOverspendersResponse>("/contracts/repeat-overspenders", params);
+}
+
+export function getOverspenderDetail(vendorName: string) {
+  return fetchApi<OverspenderDetail>(`/contracts/repeat-overspenders/${encodeURIComponent(vendorName)}`);
+}
+
 export function getContractsSummary() {
   return fetchApi<ContractSummary>("/contracts/summary");
 }
