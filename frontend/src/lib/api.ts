@@ -1,4 +1,4 @@
-const BASE = "http://localhost:5001/api";
+const BASE = import.meta.env.DEV ? "http://localhost:5001/api" : "/api";
 
 async function fetchApi<T>(path: string, params?: Record<string, string>): Promise<T> {
   const url = new URL(`${BASE}${path}`);

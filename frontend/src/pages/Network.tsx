@@ -14,7 +14,6 @@ import type {
 } from "../lib/api";
 import { useDateFilter } from "../lib/DateFilterContext";
 import {
-  formatCurrency,
   formatCompactCurrency,
   formatNumber,
 } from "../lib/formatters";

@@ -6,7 +6,6 @@ import type { OverviewData, AlertsSummary } from "../lib/api";
 import {
   formatCompactCurrency,
   formatNumber,
-  formatCurrency,
   riskColor,
 } from "../lib/formatters";
 import StatCard from "../components/StatCard";
@@ -191,7 +190,7 @@ export default function Dashboard() {
           <div className="flex items-end gap-2 h-40">
             {data.spending_by_year.map((yr) => {
               const maxYr = Math.max(
-                ...data.spending_by_year.map((y) => y.total)
+                ...data.spending_by_year.map((y) => y.total_spending)
               );
               const pct = maxYr > 0 ? (yr.total_spending / maxYr) * 100 : 0;
               return (

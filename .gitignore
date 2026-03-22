@@ -4,7 +4,7 @@ backend/data/processed/
 backend/data/cache/
 spending.duckdb
 spending.duckdb.wal
-chicago_payments.csv
+# chicago_payments.csv  # included in repo for deployment builds
 
 # Python
 __pycache__/

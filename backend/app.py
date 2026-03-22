@@ -8,7 +8,9 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from flask import Flask, jsonify
+import os
+
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
 from backend.api.routes_overview import overview_bp
@@ -24,10 +26,22 @@ from backend.api.routes_network import network_bp
 
 def create_app():
     """Create and configure the Flask application."""
-    app = Flask(__name__)
+    # In production, serve the built React app
+    static_dir = _project_root / "frontend" / "dist"
+    if static_dir.exists():
+        app = Flask(
+            __name__,
+            static_folder=str(static_dir),
+            static_url_path="",
+        )
+    else:
+        app = Flask(__name__)
 
-    # Enable CORS for the Vite dev server
-    CORS(app, origins=["http://localhost:5173", "http://localhost:5174"])
+    # CORS for dev; in production the frontend is served from same origin
+    CORS(app, origins=[
+        "http://localhost:5173", "http://localhost:5174",
+        os.environ.get("RENDER_EXTERNAL_URL", ""),
+    ])
 
     # Register blueprints
     app.register_blueprint(overview_bp)
@@ -42,10 +56,6 @@ def create_app():
 
     # --- Error handlers ---
 
-    @app.errorhandler(404)
-    def not_found(e):
-        return jsonify({"error": "Not found"}), 404
-
     @app.errorhandler(500)
     def server_error(e):
         return jsonify({"error": "Internal server error"}), 500
@@ -54,6 +64,18 @@ def create_app():
     @app.route("/api/health")
     def health():
         return jsonify({"status": "ok"})
+
+    # Serve React app for all non-API routes (SPA routing)
+    @app.errorhandler(404)
+    def not_found(e):
+        # If it's an API route, return JSON 404
+        from flask import request as req
+        if req.path.startswith("/api/"):
+            return jsonify({"error": "Not found"}), 404
+        # Otherwise serve the React app
+        if app.static_folder and os.path.exists(os.path.join(app.static_folder, "index.html")):
+            return send_from_directory(app.static_folder, "index.html")
+        return jsonify({"error": "Not found"}), 404
 
     return app
 

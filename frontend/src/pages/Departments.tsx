@@ -117,7 +117,7 @@ export default function Departments() {
       ) : (
         <DataTable
           columns={columns}
-          data={departments as unknown as Record<string, unknown>[]}
+          data={departments}
           keyField="department_name"
           onRowClick={(row) => handleRowClick(row as unknown as Department)}
           emptyMessage="No departments found"

@@ -161,7 +161,7 @@ export default function Vendors() {
         <>
           <DataTable
             columns={columns}
-            data={data.vendors as unknown as Record<string, unknown>[]}
+            data={data.vendors}
             keyField="vendor_name"
             onRowClick={(row) => handleRowClick(row as unknown as Vendor)}
             emptyMessage="No vendors found"

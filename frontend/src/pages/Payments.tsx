@@ -247,7 +247,7 @@ export default function Payments() {
         <>
           <DataTable
             columns={columns}
-            data={data.payments as unknown as Record<string, unknown>[]}
+            data={data.payments}
             keyField="voucher_number"
             onRowClick={(row) => handleRowClick(row as unknown as Payment)}
             emptyMessage="No payments match your filters"

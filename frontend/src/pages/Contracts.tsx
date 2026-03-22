@@ -6,7 +6,6 @@ import {
 } from "../lib/api";
 import { useDateFilter } from "../lib/DateFilterContext";
 import type {
-  ContractListItem,
   ContractsResponse,
   ContractDetail,
   ContractSummary,

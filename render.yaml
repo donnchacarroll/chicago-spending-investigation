@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: chicago-spending
+    runtime: python
+    buildCommand: bash render-build.sh
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 "backend.app:create_app()"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.6"
+      - key: NODE_VERSION
+        value: "20"
