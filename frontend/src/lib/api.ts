@@ -1,7 +1,7 @@
 const BASE = import.meta.env.DEV ? "http://localhost:5001/api" : "/api";
 
 async function fetchApi<T>(path: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(`${BASE}${path}`);
+  const url = new URL(`${BASE}${path}`, window.location.origin);
   if (params) {
     for (const [key, value] of Object.entries(params)) {
       if (value !== undefined && value !== null && value !== "") {
