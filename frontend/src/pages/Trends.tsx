@@ -149,6 +149,11 @@ export default function Trends() {
 
       {/* Section 2: Year-over-Year */}
       <SectionWrapper title="Year-over-Year Comparison" loading={loadingYoY} error={errorYoY}>
+        {dimension === "category" && (
+          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-3 mb-4 text-xs text-blue-300">
+            <span className="font-medium">Note:</span> Spending categories are derived from contract data. Payments from 2022-2024 mostly lack contract references in this dataset, so most categories show as "NEW" in 2025. Use the <span className="font-medium">DV Subcategory</span> dimension for better historical coverage of uncontracted payments.
+          </div>
+        )}
         {yoy && <YoYTable data={yoy} />}
       </SectionWrapper>
 
@@ -405,7 +410,7 @@ function YoYTable({ data }: { data: YoYResponse }) {
                 {formatCompactCurrency(item.total)}
               </td>
               <td className="py-2.5 px-3 text-right">
-                <YoYBadge value={item.yoy_change_pct} />
+                <YoYBadge value={item.yoy_change_pct} isNew={item.is_new} />
               </td>
             </tr>
           ))}
@@ -415,7 +420,14 @@ function YoYTable({ data }: { data: YoYResponse }) {
   );
 }
 
-function YoYBadge({ value }: { value: number | null }) {
+function YoYBadge({ value, isNew }: { value: number | null; isNew?: boolean }) {
+  if (isNew) {
+    return (
+      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+        NEW
+      </span>
+    );
+  }
   if (value === null || value === undefined || !isFinite(value)) {
     return <span className="text-xs text-slate-600">N/A</span>;
   }

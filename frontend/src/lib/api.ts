@@ -408,6 +408,7 @@ export interface YoYItem {
   by_year: Record<string, number>;
   total: number;
   yoy_change_pct: number;
+  is_new?: boolean;
 }
 
 export interface YoYResponse {

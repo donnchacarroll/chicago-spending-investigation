@@ -283,6 +283,7 @@ def yoy():
 
         # Calculate YoY change between the two most recent full years
         yoy_change_pct = None
+        is_new = False
         if len(full_years) >= 2:
             latest_yr = str(full_years[-1])
             prior_yr = str(full_years[-2])
@@ -292,12 +293,15 @@ def yoy():
                 yoy_change_pct = round(
                     ((latest_val - prior_val) / prior_val) * 100, 1
                 )
+            elif latest_val > 0 and (not prior_val or prior_val == 0):
+                is_new = True
 
         items.append({
             "name": name,
             "by_year": by_year,
             "total": total,
             "yoy_change_pct": yoy_change_pct,
+            "is_new": is_new,
         })
 
     return jsonify({
