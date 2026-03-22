@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getCategories, getCategoryDetail, getDVBreakdown } from "../lib/api";
+import { getCategories, getCategoryDetail, getDVBreakdown, getDVTrends } from "../lib/api";
 import { useDateFilter } from "../lib/DateFilterContext";
-import type { CategoriesData, CategoryDetail, DVBreakdown } from "../lib/api";
+import type { CategoriesData, CategoryDetail, DVBreakdown, DVTrends } from "../lib/api";
 import {
   formatCurrency,
   formatCompactCurrency,
@@ -59,6 +59,7 @@ export default function Categories() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [dvData, setDvData] = useState<DVBreakdown | null>(null);
+  const [dvTrends, setDvTrends] = useState<DVTrends | null>(null);
   const [dvSubcategory, setDvSubcategory] = useState<string>("");
   const [showDvDeepDive, setShowDvDeepDive] = useState(false);
 
@@ -75,8 +76,12 @@ export default function Categories() {
     const params = applyToParams({});
     if (subcategory) params.subcategory = subcategory;
     try {
-      const result = await getDVBreakdown(params);
+      const [result, trends] = await Promise.all([
+        getDVBreakdown(params),
+        dvTrends ? Promise.resolve(dvTrends) : getDVTrends(applyToParams({})),
+      ]);
       setDvData(result);
+      setDvTrends(trends);
       setShowDvDeepDive(true);
     } catch {
       // ignore
@@ -289,6 +294,100 @@ export default function Categories() {
               })}
             </div>
           </div>
+
+          {/* YoY Growth Analysis */}
+          {dvTrends && dvTrends.yoy.length > 0 && (
+            <div className="mb-5">
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">
+                Year-over-Year Change ({dvTrends.yoy_years[0]} vs {dvTrends.yoy_years[1]})
+              </h3>
+              <div className="space-y-2">
+                {dvTrends.yoy
+                  .filter((r) => r.change_pct !== null)
+                  .sort((a, b) => (b.change_pct ?? 0) - (a.change_pct ?? 0))
+                  .map((row) => {
+                    const isGrowing = (row.change_pct ?? 0) > 15;
+                    const isDeclining = (row.change_pct ?? 0) < -15;
+                    return (
+                      <div
+                        key={row.subcategory}
+                        className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs ${
+                          isGrowing
+                            ? "bg-red-500/10 border border-red-500/20"
+                            : isDeclining
+                            ? "bg-emerald-500/10 border border-emerald-500/20"
+                            : "bg-slate-800/50"
+                        }`}
+                      >
+                        <span className="text-slate-300 flex-1">{row.subcategory}</span>
+                        <span className="text-slate-500 mx-4">
+                          {formatCompactCurrency(row.prior_year)} &rarr; {formatCompactCurrency(row.latest_year)}
+                        </span>
+                        <span
+                          className={`font-bold min-w-[60px] text-right ${
+                            (row.change_pct ?? 0) > 50
+                              ? "text-red-400"
+                              : (row.change_pct ?? 0) > 15
+                              ? "text-orange-400"
+                              : (row.change_pct ?? 0) < -15
+                              ? "text-emerald-400"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {row.change_pct !== null ? `${row.change_pct > 0 ? "+" : ""}${row.change_pct.toFixed(0)}%` : "—"}
+                        </span>
+                      </div>
+                    );
+                  })}
+              </div>
+              {/* Key callouts */}
+              {dvTrends.growing.length > 0 && (
+                <div className="mt-3 bg-red-500/5 border border-red-500/20 rounded-lg p-3">
+                  <p className="text-xs text-red-400 font-semibold mb-1">Fastest Growing</p>
+                  {dvTrends.growing.slice(0, 3).map((g) => (
+                    <p key={g.subcategory} className="text-xs text-slate-400">
+                      <span className="text-red-400 font-medium">+{g.change_pct.toFixed(0)}%</span>{" "}
+                      {g.subcategory}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Unclassified "Other" vendors */}
+          {dvTrends && dvTrends.other_dv_top_vendors.length > 0 && (
+            <div className="mb-5 bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-yellow-400 mb-1">
+                Unclassified Direct Voucher Vendors
+              </h3>
+              <p className="text-xs text-slate-400 mb-3">
+                These vendors in the &quot;Other Direct Voucher&quot; bucket may need reclassification.
+                Some may be pensions, payroll, or other identifiable categories.
+              </p>
+              <div className="space-y-1.5 max-h-48 overflow-auto">
+                {dvTrends.other_dv_top_vendors.slice(0, 15).map((v) => {
+                  const maxV = dvTrends.other_dv_top_vendors[0].total_paid;
+                  return (
+                    <div key={v.vendor_name}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="text-slate-400 truncate mr-2">{v.vendor_name}</span>
+                        <span className="text-slate-300 whitespace-nowrap">
+                          {formatCompactCurrency(v.total_paid)} ({v.payment_count})
+                        </span>
+                      </div>
+                      <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-yellow-500/60 rounded-full"
+                          style={{ width: `${(v.total_paid / maxV) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Drill-down vendors for selected subcategory */}
           {dvSubcategory && dvData.top_vendors && dvData.top_vendors.length > 0 && (

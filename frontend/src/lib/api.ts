@@ -309,6 +309,19 @@ export function getDVBreakdown(params?: Record<string, string>) {
   return fetchApi<DVBreakdown>("/categories/direct-vouchers", params);
 }
 
+export interface DVTrends {
+  monthly: Array<{ year: number; month: number; subcategory: string; total: number; count: number }>;
+  yoy: Array<{ subcategory: string; prior_year: number; latest_year: number; total: number; change_pct: number | null }>;
+  yoy_years: number[];
+  growing: Array<{ subcategory: string; change_pct: number }>;
+  declining: Array<{ subcategory: string; change_pct: number }>;
+  other_dv_top_vendors: Array<{ vendor_name: string; total_paid: number; payment_count: number }>;
+}
+
+export function getDVTrends(params?: Record<string, string>) {
+  return fetchApi<DVTrends>("/categories/direct-vouchers/trends", params);
+}
+
 // Contract types
 
 export interface ContractListItem {

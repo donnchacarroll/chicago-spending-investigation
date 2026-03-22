@@ -213,6 +213,88 @@ def direct_voucher_breakdown():
     })
 
 
+@categories_bp.route("/direct-vouchers/trends", methods=["GET"])
+def dv_trends():
+    """Trend analysis for direct voucher spending by subcategory over time."""
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    date_conditions, date_params = _build_date_filter(start_date, end_date)
+
+    # Monthly spending by DV subcategory
+    monthly = _safe_query(
+        f"""
+        SELECT
+            EXTRACT(YEAR FROM check_date)::INT AS year,
+            EXTRACT(MONTH FROM check_date)::INT AS month,
+            COALESCE(dv_subcategory, 'Unclassified') AS subcategory,
+            SUM(amount) AS total,
+            COUNT(*) AS count
+        FROM payment_contract_joined
+        WHERE contract_type = 'direct_voucher'
+          AND is_annual_aggregate = false{date_conditions}
+        GROUP BY 1, 2, 3
+        ORDER BY 1, 2
+        """,
+        date_params if date_params else None,
+    )
+
+    # YoY comparison by subcategory (two most recent full years)
+    import datetime
+    current_year = datetime.date.today().year
+    yoy = _safe_query(
+        f"""
+        SELECT
+            COALESCE(dv_subcategory, 'Unclassified') AS subcategory,
+            SUM(CASE WHEN EXTRACT(YEAR FROM check_date) = {current_year - 2} THEN amount ELSE 0 END) AS prior_year,
+            SUM(CASE WHEN EXTRACT(YEAR FROM check_date) = {current_year - 1} THEN amount ELSE 0 END) AS latest_year,
+            SUM(amount) AS total
+        FROM payment_contract_joined
+        WHERE contract_type = 'direct_voucher'
+          AND is_annual_aggregate = false{date_conditions}
+        GROUP BY 1
+        ORDER BY total DESC
+        """,
+        date_params if date_params else None,
+    )
+
+    for row in yoy:
+        prior = row.get("prior_year", 0) or 0
+        latest = row.get("latest_year", 0) or 0
+        row["change_pct"] = round(((latest - prior) / prior) * 100, 1) if prior > 0 else None
+    yoy_years = [current_year - 2, current_year - 1]
+
+    # Fastest growing subcategories
+    growing = sorted(
+        [r for r in yoy if r.get("change_pct") is not None],
+        key=lambda r: r["change_pct"],
+        reverse=True,
+    )
+
+    # Top vendors in "Other Direct Voucher" (the unclassified residual)
+    other_vendors = _safe_query(
+        f"""
+        SELECT vendor_name, SUM(amount) AS total_paid, COUNT(*) AS payment_count
+        FROM payment_contract_joined
+        WHERE contract_type = 'direct_voucher'
+          AND is_annual_aggregate = false
+          AND dv_subcategory = 'Other Direct Voucher'{date_conditions}
+        GROUP BY vendor_name
+        ORDER BY total_paid DESC
+        LIMIT 20
+        """,
+        date_params if date_params else None,
+    )
+
+    return jsonify({
+        "monthly": monthly,
+        "yoy": yoy,
+        "yoy_years": yoy_years,
+        "growing": growing[:5],
+        "declining": list(reversed(growing))[:5] if growing else [],
+        "other_dv_top_vendors": other_vendors,
+    })
+
+
 @categories_bp.route("/<category_name>", methods=["GET"])
 def category_detail(category_name):
     """Drill into a specific spending category."""

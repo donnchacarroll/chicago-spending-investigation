@@ -16,6 +16,7 @@ DIMENSION_COLUMNS = {
     "procurement": "COALESCE(procurement_type, 'Unknown')",
     "dv_subcategory": "COALESCE(dv_subcategory, 'Unclassified')",
     "vendor": "COALESCE(vendor_name, 'Unknown')",
+    "dv_vendor": "COALESCE(vendor_name, 'Unknown')",
 }
 
 
@@ -58,7 +59,7 @@ def _get_dimension_col(dimension):
 
 def _get_dimension_extra_filter(dimension):
     """Return extra WHERE clause needed for certain dimensions."""
-    if dimension == "dv_subcategory":
+    if dimension in ("dv_subcategory", "dv_vendor"):
         return " AND contract_type = 'direct_voucher'"
     return ""
 
