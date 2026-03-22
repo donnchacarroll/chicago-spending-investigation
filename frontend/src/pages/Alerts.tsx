@@ -88,26 +88,45 @@ export default function Alerts() {
 
       {/* Summary cards */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          <div className="card p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+          <button
+            onClick={() => { setFlagType(""); setMinRisk(""); setPage(1); }}
+            className={`card p-4 text-left transition-colors ${
+              !flagType && !minRisk ? "border-blue-500/50 bg-blue-500/5" : "hover:bg-slate-800/60"
+            }`}
+          >
             <p className="text-2xl font-bold text-white">
               {summary.total_count.toLocaleString()}
             </p>
             <p className="text-xs text-slate-500">Total Alerts</p>
-          </div>
-          <div className="card p-4 border-red-500/30">
+            {!flagType && !minRisk && <p className="text-[10px] text-blue-400 mt-1">Showing all</p>}
+          </button>
+          <button
+            onClick={() => { setFlagType(""); setMinRisk("75"); setPage(1); }}
+            className={`card p-4 text-left transition-colors ${
+              minRisk === "75" && !flagType ? "border-red-500/50 bg-red-500/5" : "border-red-500/30 hover:bg-red-500/5"
+            }`}
+          >
             <p className="text-2xl font-bold text-red-400">
               {summary.critical_count.toLocaleString()}
             </p>
             <p className="text-xs text-slate-500">Critical (score &gt; 75)</p>
-          </div>
-          {flagTypes.slice(0, 2).map((ft) => (
-            <div key={ft.flag_type} className="card p-4">
+            {minRisk === "75" && !flagType && <p className="text-[10px] text-red-400 mt-1">Filtered</p>}
+          </button>
+          {flagTypes.map((ft) => (
+            <button
+              key={ft.flag_type}
+              onClick={() => { setFlagType(ft.flag_type); setMinRisk(""); setPage(1); }}
+              className={`card p-4 text-left transition-colors ${
+                flagType === ft.flag_type ? "border-orange-500/50 bg-orange-500/5" : "hover:bg-slate-800/60"
+              }`}
+            >
               <p className="text-2xl font-bold text-slate-200">
                 {ft.count.toLocaleString()}
               </p>
               <p className="text-xs text-slate-500 truncate">{ft.flag_type}</p>
-            </div>
+              {flagType === ft.flag_type && <p className="text-[10px] text-orange-400 mt-1">Filtered</p>}
+            </button>
           ))}
         </div>
       )}
