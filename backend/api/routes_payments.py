@@ -41,8 +41,8 @@ def list_payments():
 
     vendor = request.args.get("vendor")
     if vendor:
-        conditions.append("p.vendor_name = $" + str(len(params) + 1))
-        params.append(vendor)
+        conditions.append("p.vendor_name ILIKE $" + str(len(params) + 1))
+        params.append(f"%{vendor}%")
 
     min_amount = request.args.get("min_amount", type=float)
     if min_amount is not None:
