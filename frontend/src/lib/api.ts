@@ -639,3 +639,41 @@ export function getVendorAliases(params?: Record<string, string>) {
 export function getClusterDetail(address: string, params?: Record<string, string>) {
   return fetchApi<ClusterDetail>(`/network/cluster/${encodeURIComponent(address)}`, params);
 }
+
+// True Cost types
+
+export interface TrueCostDetailItem {
+  tier: "attributed" | "estimated";
+  source_vendor: string;
+  amount: number;
+  reason: string;
+}
+
+export interface TrueCostDepartment {
+  department_name: string;
+  employee_count: number;
+  total_salary: number;
+  confirmed_payments: number;
+  confirmed_contracts: number;
+  attributed_total: number;
+  estimated_total: number;
+  total_true_cost: number;
+  detail: TrueCostDetailItem[];
+}
+
+export interface TrueCostResponse {
+  departments: TrueCostDepartment[];
+  totals: {
+    total_employees: number;
+    total_salary: number;
+    total_confirmed_payments: number;
+    total_attributed: number;
+    total_estimated: number;
+    grand_total_true_cost: number;
+  };
+  methodology: string;
+}
+
+export function getDepartmentTrueCost() {
+  return fetchApi<TrueCostResponse>("/departments/true-cost");
+}

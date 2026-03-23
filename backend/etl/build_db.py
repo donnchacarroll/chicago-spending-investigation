@@ -16,6 +16,7 @@ from backend.config import DUCKDB_PATH, DATA_PROCESSED
 from backend.etl.ingest import ingest_payments
 from backend.etl.enrich import enrich_payments
 from backend.external.fetch_contracts import fetch_contracts
+from backend.external.fetch_salaries import fetch_salaries
 from backend.analysis.outliers import detect_outliers
 from backend.analysis.duplicates import detect_duplicates
 from backend.analysis.splitting import detect_splitting
@@ -141,6 +142,271 @@ def build_database():
     for row in dv_check:
         print(f"       {row[0]:30s} {row[1]:>8,} payments  ${row[2]}B")
 
+    # ── Salary data and department true cost ──────────────────
+    print()
+    print("  Fetching salary data ...")
+    salaries_df = fetch_salaries()
+    con.execute("CREATE TABLE salaries AS SELECT * FROM salaries_df")
+    sal_count = con.execute("SELECT COUNT(*) FROM salaries").fetchone()[0]
+    print(f"    -> {sal_count:,} rows")
+
+    print("  Building department true cost tables ...")
+
+    # Step A: Salary totals by department
+    con.execute("""
+        CREATE TABLE dept_salary_totals AS
+        SELECT department,
+               COUNT(*) AS employee_count,
+               SUM(CAST(annual_salary AS DOUBLE)) AS total_salary
+        FROM salaries
+        GROUP BY department
+    """)
+
+    # Step B: Confirmed payment totals (tagged to a department)
+    con.execute("""
+        CREATE TABLE dept_confirmed_payments AS
+        SELECT department_canonical AS department_name,
+               SUM(amount) AS confirmed_payments,
+               COUNT(*) AS confirmed_count
+        FROM payment_contract_joined
+        WHERE is_annual_aggregate = false
+          AND department_canonical IS NOT NULL
+        GROUP BY department_canonical
+    """)
+
+    # Step C: Contract award totals by department (latest revision only)
+    con.execute("""
+        CREATE TABLE dept_confirmed_contracts AS
+        SELECT department AS department_name,
+               SUM(CAST(award_amount AS DOUBLE)) AS confirmed_contracts,
+               COUNT(*) AS contract_count
+        FROM (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY specification_number
+                       ORDER BY revision_number DESC NULLS LAST
+                   ) AS rn
+            FROM contracts
+            WHERE department IS NOT NULL
+        ) sub
+        WHERE rn = 1
+        GROUP BY department
+    """)
+
+    # Step D: Pension fund mapping — attribute pension payments to departments
+    PENSION_MAP = {
+        "POLICEMENS A & B FUND": "CHICAGO POLICE DEPARTMENT",
+        "FIREMENS ANNUITY BENEFIT FUND": "CHICAGO FIRE DEPARTMENT",
+        "CHICAGO PATROLMEN'S FCU": "CHICAGO POLICE DEPARTMENT",
+        "CHICAGO FIREMANS ASSN CREDIT": "CHICAGO FIRE DEPARTMENT",
+    }
+
+    pension_rows = []
+    for vendor, dept in PENSION_MAP.items():
+        row = con.execute("""
+            SELECT SUM(amount) AS total
+            FROM payment_contract_joined
+            WHERE vendor_name = $1
+              AND is_annual_aggregate = false
+              AND (department_canonical IS NULL OR department_canonical = '')
+        """, [vendor]).fetchone()
+        amt = row[0] if row[0] else 0
+        if amt > 0:
+            pension_rows.append((dept, vendor, amt, "pension_fund_mapping"))
+
+    # Step E: Single-department vendor attribution
+    # Find vendors where 90%+ of their contract value goes to one department
+    single_dept_vendors = con.execute("""
+        WITH latest_contracts AS (
+            SELECT *,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY specification_number
+                       ORDER BY revision_number DESC NULLS LAST
+                   ) AS rn
+            FROM contracts
+            WHERE department IS NOT NULL
+        ),
+        vendor_dept_totals AS (
+            SELECT vendor_name,
+                   department,
+                   SUM(CAST(award_amount AS DOUBLE)) AS dept_total
+            FROM latest_contracts
+            WHERE rn = 1
+            GROUP BY vendor_name, department
+        ),
+        vendor_totals AS (
+            SELECT vendor_name,
+                   SUM(dept_total) AS grand_total
+            FROM vendor_dept_totals
+            GROUP BY vendor_name
+        )
+        SELECT vdt.vendor_name, vdt.department, vdt.dept_total,
+               vdt.dept_total / NULLIF(vt.grand_total, 0) AS share
+        FROM vendor_dept_totals vdt
+        JOIN vendor_totals vt ON vdt.vendor_name = vt.vendor_name
+        WHERE vdt.dept_total / NULLIF(vt.grand_total, 0) >= 0.9
+    """).fetchall()
+
+    single_dept_map = {row[0]: row[1] for row in single_dept_vendors}
+
+    # Attribute DV payments for single-department vendors
+    single_dept_rows = []
+    for vendor, dept in single_dept_map.items():
+        row = con.execute("""
+            SELECT SUM(amount) AS total
+            FROM payment_contract_joined
+            WHERE vendor_name = $1
+              AND is_annual_aggregate = false
+              AND (department_canonical IS NULL OR department_canonical = '')
+        """, [vendor]).fetchone()
+        amt = row[0] if row[0] else 0
+        if amt > 0:
+            single_dept_rows.append((dept, vendor, amt, "single_dept_vendor"))
+
+    # Combine attributed rows
+    all_attributed = pension_rows + single_dept_rows
+    if all_attributed:
+        attributed_df = pd.DataFrame(all_attributed, columns=[
+            "department_name", "source_vendor", "amount", "reason"
+        ])
+    else:
+        attributed_df = pd.DataFrame(columns=[
+            "department_name", "source_vendor", "amount", "reason"
+        ])
+
+    # Step F: Proportional allocation of shared costs
+    SHARED_COST_VENDORS = [
+        "MUNICIPAL EMPLOYEE PENSION FD",
+        "MUNICIPAL EMPLOYEES ANNUITY AND BENEFIT FUND OF CHICAGO",
+        "LABORERS & RETIREMENT BOARD",
+        "BLUE CROSS & BLUE SHIELD",
+        "NATIONWIDE RETIREMENT SOLUTION",
+        "AMALGAMATED BANK OF CHICAGO",
+        "USI INSURANCE SERVICES LLC.",
+    ]
+
+    # Get total shared costs (unattributed DV payments from shared vendors)
+    placeholders = ", ".join([f"${i+1}" for i in range(len(SHARED_COST_VENDORS))])
+    shared_total_row = con.execute(f"""
+        SELECT SUM(amount) AS total
+        FROM payment_contract_joined
+        WHERE vendor_name IN ({placeholders})
+          AND is_annual_aggregate = false
+          AND (department_canonical IS NULL OR department_canonical = '')
+    """, SHARED_COST_VENDORS).fetchone()
+    shared_total = shared_total_row[0] if shared_total_row[0] else 0
+
+    # Get total headcount for proportional allocation
+    total_headcount_row = con.execute(
+        "SELECT SUM(employee_count) FROM dept_salary_totals"
+    ).fetchone()
+    total_headcount = total_headcount_row[0] if total_headcount_row[0] else 1
+
+    # Build shared cost detail per vendor per department
+    shared_rows = []
+    for vendor in SHARED_COST_VENDORS:
+        vrow = con.execute("""
+            SELECT SUM(amount) AS total
+            FROM payment_contract_joined
+            WHERE vendor_name = $1
+              AND is_annual_aggregate = false
+              AND (department_canonical IS NULL OR department_canonical = '')
+        """, [vendor]).fetchone()
+        vendor_total = vrow[0] if vrow[0] else 0
+        if vendor_total > 0:
+            # Allocate proportionally by headcount
+            depts = con.execute(
+                "SELECT department, employee_count FROM dept_salary_totals"
+            ).fetchall()
+            for dept_name, emp_count in depts:
+                share = (emp_count / total_headcount) * vendor_total
+                if share > 0:
+                    shared_rows.append((dept_name, vendor, share, "proportional_headcount"))
+
+    if shared_rows:
+        shared_df = pd.DataFrame(shared_rows, columns=[
+            "department_name", "source_vendor", "amount", "reason"
+        ])
+    else:
+        shared_df = pd.DataFrame(columns=[
+            "department_name", "source_vendor", "amount", "reason"
+        ])
+
+    # ── Build department_cost_detail table ──
+    detail_rows = []
+    # Confirmed tier: from dept_confirmed_payments
+    confirmed = con.execute(
+        "SELECT department_name, confirmed_payments FROM dept_confirmed_payments"
+    ).fetchall()
+    for dept, amt in confirmed:
+        detail_rows.append((dept, "confirmed", "TAGGED_PAYMENTS", amt, "department_tagged_payments"))
+
+    # Confirmed contracts tier
+    confirmed_c = con.execute(
+        "SELECT department_name, confirmed_contracts FROM dept_confirmed_contracts"
+    ).fetchall()
+    for dept, amt in confirmed_c:
+        detail_rows.append((dept, "confirmed", "CONTRACT_AWARDS", amt, "contract_awards"))
+
+    # Attributed tier
+    for _, row in attributed_df.iterrows():
+        detail_rows.append((
+            row["department_name"], "attributed", row["source_vendor"],
+            row["amount"], row["reason"]
+        ))
+
+    # Estimated tier
+    for _, row in shared_df.iterrows():
+        detail_rows.append((
+            row["department_name"], "estimated", row["source_vendor"],
+            row["amount"], row["reason"]
+        ))
+
+    detail_df = pd.DataFrame(detail_rows, columns=[
+        "department_name", "tier", "source_vendor", "amount", "reason"
+    ])
+    con.execute("CREATE TABLE department_cost_detail AS SELECT * FROM detail_df")
+
+    # ── Build department_true_cost summary table ──
+    # Aggregate by department across all tiers
+    con.execute("""
+        CREATE TABLE department_true_cost AS
+        WITH attributed_totals AS (
+            SELECT department_name, SUM(amount) AS attributed_total
+            FROM department_cost_detail
+            WHERE tier = 'attributed'
+            GROUP BY department_name
+        ),
+        estimated_totals AS (
+            SELECT department_name, SUM(amount) AS estimated_total
+            FROM department_cost_detail
+            WHERE tier = 'estimated'
+            GROUP BY department_name
+        )
+        SELECT
+            COALESCE(s.department, cp.department_name, cc.department_name) AS department_name,
+            COALESCE(s.employee_count, 0) AS employee_count,
+            COALESCE(s.total_salary, 0) AS total_salary,
+            COALESCE(cp.confirmed_payments, 0) AS confirmed_payments,
+            COALESCE(cc.confirmed_contracts, 0) AS confirmed_contracts,
+            COALESCE(a.attributed_total, 0) AS attributed_total,
+            COALESCE(e.estimated_total, 0) AS estimated_total,
+            COALESCE(cp.confirmed_payments, 0)
+                + COALESCE(a.attributed_total, 0)
+                + COALESCE(e.estimated_total, 0) AS total_true_cost
+        FROM dept_salary_totals s
+        FULL OUTER JOIN dept_confirmed_payments cp ON UPPER(s.department) = UPPER(cp.department_name)
+        FULL OUTER JOIN dept_confirmed_contracts cc ON UPPER(COALESCE(s.department, cp.department_name)) = UPPER(cc.department_name)
+        LEFT JOIN attributed_totals a ON UPPER(COALESCE(s.department, cp.department_name)) = UPPER(a.department_name)
+        LEFT JOIN estimated_totals e ON UPPER(COALESCE(s.department, cp.department_name)) = UPPER(e.department_name)
+        ORDER BY total_true_cost DESC
+    """)
+
+    tc_count = con.execute("SELECT COUNT(*) FROM department_true_cost").fetchone()[0]
+    print(f"    -> department_true_cost: {tc_count} departments")
+    detail_count = con.execute("SELECT COUNT(*) FROM department_cost_detail").fetchone()[0]
+    print(f"    -> department_cost_detail: {detail_count} rows")
+
     # Step 5: Run analysis modules
     print()
     print("=" * 60)
@@ -223,8 +489,9 @@ def build_database():
     print()
     print("=" * 60)
     print(f"DONE. Database created at {DUCKDB_PATH}")
-    print("Tables: payments, contracts, payment_contract_joined, alerts,")
-    print("        payment_risk_scores, vendor_risk_scores, department_risk_scores")
+    print("Tables: payments, contracts, payment_contract_joined, salaries, alerts,")
+    print("        payment_risk_scores, vendor_risk_scores, department_risk_scores,")
+    print("        department_true_cost, department_cost_detail")
     print("=" * 60)
 
 

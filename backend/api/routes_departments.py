@@ -59,6 +59,72 @@ def list_departments():
     return jsonify({"departments": data})
 
 
+@departments_bp.route("/true-cost", methods=["GET"])
+def department_true_cost():
+    """Return department true cost analysis with attribution detail and methodology."""
+    departments = _safe_query("""
+        SELECT department_name, employee_count, total_salary,
+               confirmed_payments, confirmed_contracts,
+               attributed_total, estimated_total, total_true_cost
+        FROM department_true_cost
+        ORDER BY total_true_cost DESC
+    """)
+
+    # Attach cost detail per department
+    detail = _safe_query("""
+        SELECT department_name, tier, source_vendor, amount, reason
+        FROM department_cost_detail
+        ORDER BY department_name, tier, amount DESC
+    """)
+
+    # Build detail lookup
+    detail_by_dept = {}
+    for row in detail:
+        dept = row["department_name"]
+        if dept not in detail_by_dept:
+            detail_by_dept[dept] = []
+        detail_by_dept[dept].append({
+            "tier": row["tier"],
+            "source_vendor": row["source_vendor"],
+            "amount": row["amount"],
+            "reason": row["reason"],
+        })
+
+    for dept in departments:
+        dept["cost_detail"] = detail_by_dept.get(dept["department_name"], [])
+
+    # Totals across all departments
+    totals = _safe_query("""
+        SELECT SUM(employee_count) AS total_employees,
+               SUM(total_salary) AS total_salary,
+               SUM(confirmed_payments) AS total_confirmed_payments,
+               SUM(attributed_total) AS total_attributed,
+               SUM(estimated_total) AS total_estimated,
+               SUM(total_true_cost) AS grand_total_true_cost
+        FROM department_true_cost
+    """)
+
+    methodology = (
+        "Department true cost is computed in three tiers: "
+        "(1) Confirmed: payments explicitly tagged with a department in city records, "
+        "plus contract awards from the contracts database. "
+        "(2) Attributed: payments to vendors with a known single-department relationship "
+        "(e.g., pension funds mapped to Police or Fire), where 90%+ of contract value "
+        "goes to one department. Their untagged (Direct Voucher) payments are attributed "
+        "to that department. "
+        "(3) Estimated: shared costs (city-wide pension funds, insurance, banking) "
+        "allocated proportionally by department headcount. "
+        "Salary data comes from the Chicago Data Portal employee salary dataset "
+        "(current snapshot, not historical)."
+    )
+
+    return jsonify({
+        "departments": departments,
+        "totals": totals[0] if totals else {},
+        "methodology": methodology,
+    })
+
+
 @departments_bp.route("/<path:department_name>", methods=["GET"])
 def department_detail(department_name):
     """Return detailed department information."""

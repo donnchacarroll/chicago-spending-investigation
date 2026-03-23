@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getDepartments, getDepartmentDetail } from "../lib/api";
+import { getDepartments, getDepartmentDetail, getDepartmentTrueCost } from "../lib/api";
 import { useDateFilter } from "../lib/DateFilterContext";
-import type { Department } from "../lib/api";
+import type { Department, TrueCostDepartment, TrueCostResponse } from "../lib/api";
 import {
   formatCurrency,
   formatCompactCurrency,
@@ -27,6 +27,285 @@ interface DeptDetail {
   flags: Array<{ flag_type: string; description: string; risk_score: number; vendor_name: string; amount: number }>;
 }
 
+type ViewMode = "payment" | "truecost";
+
+function TierBadge({ tier }: { tier: string }) {
+  if (tier === "confirmed") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+        Confirmed
+      </span>
+    );
+  }
+  if (tier === "attributed") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+        Attributed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 border-dashed">
+      Estimated
+    </span>
+  );
+}
+
+function StackedBar({ dept, maxCost }: { dept: TrueCostDepartment; maxCost: number }) {
+  const confirmed = dept.total_salary + dept.confirmed_payments + dept.confirmed_contracts;
+  const total = dept.total_true_cost || 1;
+  const barWidth = maxCost > 0 ? (total / maxCost) * 100 : 0;
+
+  const confirmedPct = (confirmed / total) * 100;
+  const attributedPct = (dept.attributed_total / total) * 100;
+  const estimatedPct = (dept.estimated_total / total) * 100;
+
+  return (
+    <div className="w-full">
+      <div
+        className="h-5 rounded-md overflow-hidden flex"
+        style={{ width: `${Math.max(barWidth, 2)}%` }}
+        title={`Confirmed: ${formatCompactCurrency(confirmed)} | Attributed: ${formatCompactCurrency(dept.attributed_total)} | Estimated: ${formatCompactCurrency(dept.estimated_total)}`}
+      >
+        {confirmedPct > 0 && (
+          <div
+            className="bg-emerald-500 h-full transition-all"
+            style={{ width: `${confirmedPct}%` }}
+          />
+        )}
+        {attributedPct > 0 && (
+          <div
+            className="bg-blue-500 h-full transition-all"
+            style={{ width: `${attributedPct}%` }}
+          />
+        )}
+        {estimatedPct > 0 && (
+          <div
+            className="bg-amber-500/70 h-full transition-all"
+            style={{ width: `${estimatedPct}%`, borderRight: "2px dashed rgba(245,158,11,0.5)" }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TrueCostView({
+  data,
+  loading,
+  error,
+}: {
+  data: TrueCostResponse | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  const [expandedDept, setExpandedDept] = useState<string | null>(null);
+  const [showMethodology, setShowMethodology] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="card p-8 text-center">
+        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+        <p className="text-slate-500 text-sm">Loading true cost data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div className="card p-8 text-center text-red-400">{error}</div>;
+  }
+
+  if (!data || data.departments.length === 0) {
+    return <div className="card p-8 text-center text-slate-500">No true cost data available.</div>;
+  }
+
+  const sorted = [...data.departments].sort((a, b) => b.total_true_cost - a.total_true_cost);
+  const grandTotal = sorted.reduce((s, d) => s + d.total_true_cost, 0);
+  const totalPayroll = sorted.reduce((s, d) => s + d.total_salary, 0);
+  const maxCost = sorted[0]?.total_true_cost || 1;
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="card p-4">
+          <p className="text-2xl font-bold text-white">{formatCompactCurrency(grandTotal)}</p>
+          <p className="text-xs text-slate-500 mt-1">Total True Cost</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-2xl font-bold text-emerald-400">{formatCompactCurrency(totalPayroll)}</p>
+          <p className="text-xs text-slate-500 mt-1">Total Payroll</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-2xl font-bold text-blue-400">{formatNumber(data.totals?.total_employees || 0)}</p>
+          <p className="text-xs text-slate-500 mt-1">Total Employees</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-2xl font-bold text-slate-200">{sorted.length}</p>
+          <p className="text-xs text-slate-500 mt-1">Departments with cost data</p>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400">
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block" /> Confirmed
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> Attributed
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-amber-500/70 inline-block border border-dashed border-amber-500/50" /> Estimated
+        </span>
+      </div>
+
+      {/* Department list */}
+      <div className="space-y-2">
+        {sorted.map((dept) => {
+          const isExpanded = expandedDept === dept.department_name;
+          const pctOfTotal = grandTotal > 0 ? ((dept.total_true_cost / grandTotal) * 100).toFixed(1) : "0.0";
+          const confirmed = dept.total_salary + dept.confirmed_payments + dept.confirmed_contracts;
+
+          return (
+            <div key={dept.department_name} className="card overflow-hidden">
+              <button
+                className="w-full text-left p-4 hover:bg-slate-800/50 transition-colors"
+                onClick={() => setExpandedDept(isExpanded ? null : dept.department_name)}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <svg
+                      className={`w-4 h-4 text-slate-500 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="text-white font-medium">{dept.department_name}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-slate-400">{formatNumber(dept.employee_count)} employees</span>
+                    <span className="text-white font-semibold">{formatCompactCurrency(dept.total_true_cost)}</span>
+                    <span className="text-slate-500 text-xs w-12 text-right">{pctOfTotal}%</span>
+                  </div>
+                </div>
+                <StackedBar dept={dept} maxCost={maxCost} />
+              </button>
+
+              {/* Expanded detail */}
+              {isExpanded && (
+                <div className="border-t border-slate-700/50 p-4 bg-slate-800/30">
+                  {/* Cost breakdown */}
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+                    <div className="bg-slate-800/60 rounded-lg p-3">
+                      <p className="text-sm font-bold text-emerald-400">{formatCompactCurrency(dept.total_salary)}</p>
+                      <p className="text-[10px] text-slate-500">Salary</p>
+                    </div>
+                    <div className="bg-slate-800/60 rounded-lg p-3">
+                      <p className="text-sm font-bold text-emerald-400">{formatCompactCurrency(dept.confirmed_payments)}</p>
+                      <p className="text-[10px] text-slate-500">Confirmed Payments</p>
+                    </div>
+                    <div className="bg-slate-800/60 rounded-lg p-3">
+                      <p className="text-sm font-bold text-emerald-400">{formatCompactCurrency(dept.confirmed_contracts)}</p>
+                      <p className="text-[10px] text-slate-500">Contracts</p>
+                    </div>
+                    <div className="bg-slate-800/60 rounded-lg p-3">
+                      <p className="text-sm font-bold text-blue-400">{formatCompactCurrency(dept.attributed_total)}</p>
+                      <p className="text-[10px] text-slate-500">Attributed</p>
+                    </div>
+                    <div className="bg-slate-800/60 rounded-lg p-3">
+                      <p className="text-sm font-bold text-amber-400">{formatCompactCurrency(dept.estimated_total)}</p>
+                      <p className="text-[10px] text-slate-500">Estimated</p>
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-400 mb-3">
+                    Confirmed total: {formatCurrency(confirmed)}
+                  </div>
+
+                  {/* Detail table */}
+                  {dept.detail && dept.detail.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-slate-500 text-xs border-b border-slate-700/50">
+                            <th className="text-left py-2 pr-3 font-medium">Source Vendor</th>
+                            <th className="text-right py-2 px-3 font-medium">Amount</th>
+                            <th className="text-center py-2 px-3 font-medium">Tier</th>
+                            <th className="text-left py-2 pl-3 font-medium">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dept.detail.map((item, idx) => (
+                            <tr key={idx} className="border-b border-slate-800/50">
+                              <td className="py-2 pr-3 text-slate-300">{item.source_vendor}</td>
+                              <td className="py-2 px-3 text-right text-slate-200 font-medium">
+                                {formatCompactCurrency(item.amount)}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <TierBadge tier={item.tier} />
+                              </td>
+                              <td className="py-2 pl-3 text-slate-400 text-xs">{item.reason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Disclaimer */}
+      <div className="card p-4 border border-amber-500/20 bg-amber-500/5">
+        <p className="text-xs text-amber-400/80">
+          True cost figures combine confirmed data with attributed and estimated allocations. See methodology for details.
+        </p>
+      </div>
+
+      {/* Methodology panel */}
+      <div className="card overflow-hidden">
+        <button
+          className="w-full text-left p-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+          onClick={() => setShowMethodology(!showMethodology)}
+        >
+          <span className="text-sm font-semibold text-white">Methodology</span>
+          <svg
+            className={`w-4 h-4 text-slate-500 transition-transform ${showMethodology ? "rotate-180" : ""}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showMethodology && (
+          <div className="border-t border-slate-700/50 p-4 text-sm text-slate-400 space-y-3">
+            <div>
+              <span className="inline-block w-3 h-3 rounded-sm bg-emerald-500 mr-2 align-middle" />
+              <strong className="text-emerald-400">Confirmed</strong> -- Definitive costs: employee salaries, payments tagged to the department, and department-specific contracts. This is trustworthy data.
+            </div>
+            <div>
+              <span className="inline-block w-3 h-3 rounded-sm bg-blue-500 mr-2 align-middle" />
+              <strong className="text-blue-400">Attributed</strong> -- High-confidence allocations: pension funds, single-department vendors, and other costs strongly linked to a specific department.
+            </div>
+            <div>
+              <span className="inline-block w-3 h-3 rounded-sm bg-amber-500/70 mr-2 align-middle border border-dashed border-amber-500/50" />
+              <strong className="text-amber-400">Estimated</strong> -- Proportional allocations of shared costs (e.g., health insurance, utilities) distributed by headcount or other heuristics.
+            </div>
+            <div className="text-xs text-slate-500 pt-2 border-t border-slate-700/50">
+              Note: Salaries reflect a current snapshot and are not historical. Estimated figures are approximations and should be interpreted with appropriate caution.
+            </div>
+            {data.methodology && (
+              <div className="text-xs text-slate-500 whitespace-pre-wrap">{data.methodology}</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Departments() {
   const { applyToParams, dateFilter } = useDateFilter();
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -35,6 +314,12 @@ export default function Departments() {
   const [selectedDept, setSelectedDept] = useState<DeptDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  const [viewMode, setViewMode] = useState<ViewMode>("payment");
+  const [trueCostData, setTrueCostData] = useState<TrueCostResponse | null>(null);
+  const [trueCostLoading, setTrueCostLoading] = useState(false);
+  const [trueCostError, setTrueCostError] = useState<string | null>(null);
+  const [trueCostLoaded, setTrueCostLoaded] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     getDepartments(applyToParams({}))
@@ -42,6 +327,25 @@ export default function Departments() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [dateFilter.startDate, dateFilter.endDate]);
+
+  const handleToggleTrueCost = () => {
+    if (viewMode === "truecost") {
+      setViewMode("payment");
+      return;
+    }
+    setViewMode("truecost");
+    if (!trueCostLoaded) {
+      setTrueCostLoading(true);
+      setTrueCostError(null);
+      getDepartmentTrueCost()
+        .then((res) => {
+          setTrueCostData(res);
+          setTrueCostLoaded(true);
+        })
+        .catch((err) => setTrueCostError(err.message))
+        .finally(() => setTrueCostLoading(false));
+    }
+  };
 
   const handleRowClick = async (row: Department) => {
     if (!row.department_name) return;
@@ -119,29 +423,60 @@ export default function Departments() {
             City department spending analysis
           </p>
         </div>
-        {!loading && departments.length > 0 && (
-          <div className="text-right">
-            <p className="text-2xl font-bold text-white">{formatCompactCurrency(totalSpending)}</p>
-            <p className="text-xs text-slate-500">Total Spending ({departments.length} departments)</p>
+        <div className="flex items-center gap-4">
+          {/* View toggle */}
+          <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden">
+            <button
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                viewMode === "payment"
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-800/50 text-slate-400 hover:text-white"
+              }`}
+              onClick={() => setViewMode("payment")}
+            >
+              Payment View
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                viewMode === "truecost"
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-800/50 text-slate-400 hover:text-white"
+              }`}
+              onClick={handleToggleTrueCost}
+            >
+              True Cost View
+            </button>
           </div>
-        )}
+          {viewMode === "payment" && !loading && departments.length > 0 && (
+            <div className="text-right">
+              <p className="text-2xl font-bold text-white">{formatCompactCurrency(totalSpending)}</p>
+              <p className="text-xs text-slate-500">Total Spending ({departments.length} departments)</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {loading ? (
-        <div className="card p-8 text-center">
-          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-          <p className="text-slate-500 text-sm">Loading departments...</p>
-        </div>
-      ) : error ? (
-        <div className="card p-8 text-center text-red-400">{error}</div>
+      {viewMode === "payment" ? (
+        <>
+          {loading ? (
+            <div className="card p-8 text-center">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-slate-500 text-sm">Loading departments...</p>
+            </div>
+          ) : error ? (
+            <div className="card p-8 text-center text-red-400">{error}</div>
+          ) : (
+            <DataTable
+              columns={columns}
+              data={departments}
+              keyField="department_name"
+              onRowClick={(row) => handleRowClick(row as unknown as Department)}
+              emptyMessage="No departments found"
+            />
+          )}
+        </>
       ) : (
-        <DataTable
-          columns={columns}
-          data={departments}
-          keyField="department_name"
-          onRowClick={(row) => handleRowClick(row as unknown as Department)}
-          emptyMessage="No departments found"
-        />
+        <TrueCostView data={trueCostData} loading={trueCostLoading} error={trueCostError} />
       )}
 
       {/* Department Detail Modal */}
