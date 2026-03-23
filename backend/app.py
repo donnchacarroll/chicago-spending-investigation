@@ -22,6 +22,7 @@ from backend.api.routes_categories import categories_bp
 from backend.api.routes_trends import trends_bp
 from backend.api.routes_contracts import contracts_bp
 from backend.api.routes_network import network_bp
+from backend.api.routes_donations import donations_bp
 
 
 def create_app():
@@ -53,6 +54,7 @@ def create_app():
     app.register_blueprint(trends_bp)
     app.register_blueprint(contracts_bp)
     app.register_blueprint(network_bp)
+    app.register_blueprint(donations_bp)
 
     # --- Error handlers ---
 

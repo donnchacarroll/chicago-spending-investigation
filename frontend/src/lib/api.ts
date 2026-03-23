@@ -677,3 +677,83 @@ export interface TrueCostResponse {
 export function getDepartmentTrueCost() {
   return fetchApi<TrueCostResponse>("/departments/true-cost");
 }
+
+// Donations types
+
+export interface DonorVendor {
+  vendor_name: string;
+  total_donated: number;
+  donation_count: number;
+  total_contracts: number;
+}
+
+export interface TopRecipient {
+  committee: string;
+  total_received: number;
+  donor_count: number;
+}
+
+export interface DonationsSummary {
+  total_donations: number;
+  total_amount: number;
+  vendors_with_donations: number;
+  top_donor_vendors: DonorVendor[];
+  top_recipients: TopRecipient[];
+}
+
+export interface DonationRecord {
+  donor_name: string;
+  amount: number;
+  recipient_committee: string;
+  date: string;
+  match_type: string;
+}
+
+export interface VendorRecipient {
+  committee: string;
+  total: number;
+  count: number;
+}
+
+export interface EmployeeDonor {
+  name: string;
+  total: number;
+  count: number;
+}
+
+export interface VendorDonationDetail {
+  vendor_name: string;
+  contract_value: number;
+  donations: DonationRecord[];
+  total_donated: number;
+  donation_count: number;
+  recipients: VendorRecipient[];
+  donation_to_contract_ratio: number;
+  employees_who_donated: EmployeeDonor[];
+}
+
+export interface RedFlag {
+  vendor_name: string;
+  flag_type: string;
+  description: string;
+  donation_total: number;
+  contract_total: number;
+}
+
+export interface RedFlagsResponse {
+  flags: RedFlag[];
+}
+
+// Donations API functions
+
+export function getDonationsSummary() {
+  return fetchApi<DonationsSummary>("/donations/summary");
+}
+
+export function getVendorDonations(vendorName: string) {
+  return fetchApi<VendorDonationDetail>(`/donations/vendor/${encodeURIComponent(vendorName)}`);
+}
+
+export function getDonationRedFlags() {
+  return fetchApi<RedFlagsResponse>("/donations/red-flags");
+}

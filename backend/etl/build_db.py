@@ -407,6 +407,37 @@ def build_database():
     detail_count = con.execute("SELECT COUNT(*) FROM department_cost_detail").fetchone()[0]
     print(f"    -> department_cost_detail: {detail_count} rows")
 
+    # ── Political donation data ─────────────────────────────
+    print()
+    print("  Fetching political donation data for top vendors ...")
+    from backend.external.fetch_donations import fetch_vendor_donations
+
+    # Get top vendors by payment + contract value
+    top_vendor_rows = con.execute("""
+        SELECT vendor_name, SUM(amount) as total
+        FROM payment_contract_joined
+        WHERE is_annual_aggregate = false AND amount > 0
+        GROUP BY vendor_name
+        ORDER BY total DESC
+        LIMIT 30
+    """).fetchall()
+    top_vendor_names = [r[0] for r in top_vendor_rows]
+
+    donations_df = fetch_vendor_donations(top_vendor_names, max_vendors=30)
+    if not donations_df.empty:
+        con.execute("CREATE TABLE donations AS SELECT * FROM donations_df")
+        don_count = con.execute("SELECT COUNT(*) FROM donations").fetchone()[0]
+        print(f"    -> {don_count:,} donation records")
+    else:
+        # Create empty table so queries don't fail
+        con.execute("""CREATE TABLE donations (
+            donor_name VARCHAR, donor_employer VARCHAR, donor_city VARCHAR,
+            donor_state VARCHAR, amount DOUBLE, date VARCHAR,
+            recipient_committee VARCHAR, recipient_id VARCHAR,
+            election_cycle VARCHAR, matched_vendor VARCHAR, match_type VARCHAR
+        )""")
+        print("    -> 0 donation records (API may be rate limited)")
+
     # Step 5: Run analysis modules
     print()
     print("=" * 60)
@@ -491,7 +522,7 @@ def build_database():
     print(f"DONE. Database created at {DUCKDB_PATH}")
     print("Tables: payments, contracts, payment_contract_joined, salaries, alerts,")
     print("        payment_risk_scores, vendor_risk_scores, department_risk_scores,")
-    print("        department_true_cost, department_cost_detail")
+    print("        department_true_cost, department_cost_detail, donations")
     print("=" * 60)
 
 

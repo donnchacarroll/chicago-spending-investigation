@@ -10,6 +10,7 @@ import Trends from "./pages/Trends";
 import Categories from "./pages/Categories";
 import Contracts from "./pages/Contracts";
 import Network from "./pages/Network";
+import Donations from "./pages/Donations";
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="/categories" element={<Categories />} />
             <Route path="/contracts" element={<Contracts />} />
             <Route path="/alerts" element={<Alerts />} />
+            <Route path="/donations" element={<Donations />} />
           </Route>
         </Routes>
       </BrowserRouter>
