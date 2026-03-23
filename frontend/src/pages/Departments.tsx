@@ -56,6 +56,8 @@ export default function Departments() {
     }
   };
 
+  const totalSpending = departments.reduce((sum, d) => sum + d.total_spending, 0);
+
   const columns: Column<Department>[] = [
     {
       key: "department_name",
@@ -70,6 +72,16 @@ export default function Departments() {
       render: (row) => (
         <span className="text-emerald-400 font-medium">
           {formatCurrency(row.total_spending)}
+        </span>
+      ),
+      className: "text-right",
+    },
+    {
+      key: "pct",
+      header: "% of Total",
+      render: (row) => (
+        <span className="text-slate-400">
+          {totalSpending > 0 ? ((row.total_spending / totalSpending) * 100).toFixed(1) : 0}%
         </span>
       ),
       className: "text-right",
@@ -100,11 +112,19 @@ export default function Departments() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Departments</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          City department spending analysis
-        </p>
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Departments</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            City department spending analysis
+          </p>
+        </div>
+        {!loading && departments.length > 0 && (
+          <div className="text-right">
+            <p className="text-2xl font-bold text-white">{formatCompactCurrency(totalSpending)}</p>
+            <p className="text-xs text-slate-500">Total Spending ({departments.length} departments)</p>
+          </div>
+        )}
       </div>
 
       {loading ? (

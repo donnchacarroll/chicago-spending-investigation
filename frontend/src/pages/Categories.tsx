@@ -139,11 +139,17 @@ export default function Categories() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Spending Categories</h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Spending breakdown by category, procurement method, and contract type
-        </p>
+      <div className="flex items-end justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Spending Categories</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Spending breakdown by category, procurement method, and contract type
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-2xl font-bold text-white">{formatCompactCurrency(grandTotal)}</p>
+          <p className="text-xs text-slate-500">Total Spending</p>
+        </div>
       </div>
 
       {/* Top stat cards */}
@@ -489,6 +495,9 @@ export default function Categories() {
                   <span className="text-slate-500">{formatNumber(cat.payment_count)} payments</span>
                   <span className="text-slate-500">{formatNumber(cat.vendor_count)} vendors</span>
                   <span className="text-emerald-400 font-medium">{formatCompactCurrency(cat.total_spending)}</span>
+                  <span className="text-slate-500 font-medium">
+                    {grandTotal > 0 ? ((cat.total_spending / grandTotal) * 100).toFixed(1) : 0}%
+                  </span>
                 </div>
               </div>
               <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
@@ -536,6 +545,9 @@ export default function Categories() {
                   <div className="flex items-center gap-4 text-xs">
                     <span className="text-slate-500">{formatNumber(proc.payment_count)} payments</span>
                     <span className="text-emerald-400 font-medium">{formatCompactCurrency(proc.total_spending)}</span>
+                    <span className="text-slate-500 font-medium">
+                      {grandTotal > 0 ? ((proc.total_spending / grandTotal) * 100).toFixed(1) : 0}%
+                    </span>
                   </div>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
