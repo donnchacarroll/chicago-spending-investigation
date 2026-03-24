@@ -6,6 +6,9 @@ spending.duckdb
 spending.duckdb.wal
 # chicago_payments.csv  # included in repo for deployment builds
 
+# Environment
+.env
+
 # Python
 __pycache__/
 *.pyc

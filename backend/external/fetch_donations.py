@@ -8,7 +8,16 @@ from pathlib import Path
 from backend.config import DATA_CACHE
 
 FEC_BASE = "https://api.open.fec.gov/v1"
-FEC_KEY = "DEMO_KEY"
+
+# Load from .env file if present
+_env_path = Path(__file__).parent.parent.parent / ".env"
+if _env_path.exists():
+    for line in _env_path.read_text().splitlines():
+        if line.strip() and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
+
+FEC_KEY = os.environ.get("FEC_API_KEY", "DEMO_KEY")
 CACHE_DIR = DATA_CACHE / "donations"
 
 
