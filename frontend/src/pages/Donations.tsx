@@ -92,14 +92,14 @@ export default function Donations() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-white">Political Donations Analysis</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Cross-referencing city vendors with federal campaign contributions
+            Cross-referencing city vendors with federal and state campaign contributions
           </p>
         </div>
         <div className="card p-8 text-center">
           <p className="text-slate-400 text-sm mb-2">No data available</p>
           <p className="text-slate-600 text-xs">
             The donations analysis API may not be available yet. This feature cross-references
-            vendor data with federal campaign finance records (FEC). Please try again later.
+            vendor data with federal (FEC) and Illinois state (ISBE) campaign finance records. Please try again later.
           </p>
         </div>
       </div>
@@ -112,7 +112,7 @@ export default function Donations() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-white">Political Donations Analysis</h1>
         <p className="text-slate-500 text-sm mt-1">
-          Cross-referencing city vendors with federal campaign contributions
+          Cross-referencing city vendors with federal and Illinois state campaign contributions
         </p>
       </div>
 
@@ -127,9 +127,9 @@ export default function Donations() {
           <div>
             <p className="text-sm text-amber-200 font-medium mb-1">Data Source Notice</p>
             <p className="text-xs text-slate-400 leading-relaxed">
-              This analysis uses federal (FEC) campaign finance data. Illinois state and local campaign
-              donations are not yet included. Donation matches are based on name similarity and should
-              be verified independently.
+              This analysis combines federal campaign finance data (FEC) with Illinois state and local
+              contributions (ISBE). Donation matches are based on name similarity and should
+              be verified independently. A donation match does not imply wrongdoing.
             </p>
           </div>
         </div>
@@ -157,9 +157,17 @@ export default function Donations() {
             <p className="text-xs text-slate-500">Vendors with Donations</p>
           </div>
           <div className="card p-4">
-            <p className="text-sm font-bold text-slate-300">Federal (FEC)</p>
-            <p className="text-xs text-slate-500 mt-1">Data Source</p>
-            <p className="text-[10px] text-slate-600 mt-0.5">State data coming soon</p>
+            <div className="space-y-1.5">
+              {(summary.source_breakdown || []).map((s: { source: string; count: number; total: number }) => (
+                <div key={s.source} className="flex items-center justify-between text-xs">
+                  <span className={`font-medium ${s.source === 'isbe' ? 'text-blue-400' : 'text-emerald-400'}`}>
+                    {s.source === 'isbe' ? 'IL State (ISBE)' : 'Federal (FEC)'}
+                  </span>
+                  <span className="text-slate-400">{formatNumber(s.count)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">Data Sources</p>
           </div>
         </div>
       )}

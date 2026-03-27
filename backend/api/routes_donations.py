@@ -47,20 +47,38 @@ def donations_summary():
             "message": "Donations table not available. Run build_db to fetch donation data.",
         })
 
+    source = request.args.get("source")  # "fec", "isbe", or None for all
+    source_condition = ""
+    source_params = []
+    if source:
+        source_condition = " WHERE source = $1"
+        source_params = [source]
+
     # Total stats
-    totals = _safe_query("""
+    totals = _safe_query(f"""
         SELECT
             COUNT(*) AS total_donations,
             COALESCE(SUM(amount), 0) AS total_amount,
             COUNT(DISTINCT matched_vendor) AS vendors_with_donations
         FROM donations
-    """)
+        {source_condition}
+    """, source_params or None)
     stats = totals[0] if totals else {
         "total_donations": 0, "total_amount": 0, "vendors_with_donations": 0
     }
 
+    # Source breakdown
+    source_breakdown = _safe_query("""
+        SELECT COALESCE(source, 'fec') AS source,
+               COUNT(*) AS count,
+               COALESCE(SUM(amount), 0) AS total
+        FROM donations
+        GROUP BY COALESCE(source, 'fec')
+    """)
+
     # Top donor vendors (by donation total), joined with contract values
-    top_donor_vendors = _safe_query("""
+    source_where = f"WHERE d.source = $1" if source else ""
+    top_donor_vendors = _safe_query(f"""
         SELECT
             d.matched_vendor AS vendor_name,
             SUM(d.amount) AS total_donated,
@@ -73,23 +91,26 @@ def donations_summary():
             WHERE is_annual_aggregate = false AND amount > 0
             GROUP BY vendor_name
         ) c ON d.matched_vendor = c.vendor_name
+        {source_where}
         GROUP BY d.matched_vendor, c.total_contracts
         ORDER BY total_donated DESC
         LIMIT 20
-    """)
+    """, source_params or None)
 
     # Top recipient committees
-    top_recipients = _safe_query("""
+    source_and = f"AND source = ${len(source_params) + 1}" if source else ""
+    top_recipients = _safe_query(f"""
         SELECT
             recipient_committee AS committee,
             SUM(amount) AS total_received,
             COUNT(DISTINCT donor_name) AS donor_count
         FROM donations
         WHERE recipient_committee IS NOT NULL AND recipient_committee != ''
+        {source_and}
         GROUP BY recipient_committee
         ORDER BY total_received DESC
         LIMIT 20
-    """)
+    """, source_params or None)
 
     return jsonify({
         "total_donations": stats.get("total_donations", 0),
@@ -97,6 +118,7 @@ def donations_summary():
         "vendors_with_donations": stats.get("vendors_with_donations", 0),
         "top_donor_vendors": top_donor_vendors,
         "top_recipients": top_recipients,
+        "source_breakdown": source_breakdown,
     })
 
 
@@ -128,7 +150,7 @@ def vendor_donations(vendor_name):
     donations = _safe_query("""
         SELECT donor_name, donor_employer, donor_city, donor_state,
                amount, date, recipient_committee, recipient_id,
-               election_cycle, match_type
+               election_cycle, match_type, COALESCE(source, 'fec') AS source
         FROM donations
         WHERE matched_vendor = $1
         ORDER BY amount DESC

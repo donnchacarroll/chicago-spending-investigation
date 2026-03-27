@@ -62,22 +62,57 @@ def list_departments():
 @departments_bp.route("/true-cost", methods=["GET"])
 def department_true_cost():
     """Return department true cost analysis with attribution detail and methodology."""
-    departments = _safe_query("""
-        SELECT department_name, employee_count, total_salary,
-               confirmed_payments, confirmed_contracts,
-               attributed_total, estimated_total, total_true_cost
+    year = request.args.get("year")
+    year_condition = ""
+    year_params = []
+    if year:
+        year_condition = " WHERE year = $1"
+        year_params = [int(year)]
+
+    # When filtering by year, aggregate per department; when all years, sum across years
+    departments = _safe_query(f"""
+        SELECT department_name,
+               SUM(employee_count) AS employee_count,
+               SUM(total_salary) AS total_salary,
+               SUM(confirmed_payments) AS confirmed_payments,
+               MAX(confirmed_contracts) AS confirmed_contracts,
+               SUM(attributed_total) AS attributed_total,
+               SUM(estimated_total) AS estimated_total,
+               SUM(total_true_cost) AS total_true_cost
         FROM department_true_cost
+        {year_condition}
+        GROUP BY department_name
         ORDER BY total_true_cost DESC
-    """)
+    """, year_params or None)
+
+    # For single-year queries, employee_count/total_salary are already correct.
+    # For all-years, we show the latest year's headcount for display.
+    if not year:
+        latest_salary = _safe_query("""
+            SELECT department_name, employee_count, total_salary
+            FROM department_true_cost
+            WHERE year = (SELECT MAX(year) FROM department_true_cost WHERE total_salary > 0)
+        """)
+        salary_lookup = {r["department_name"]: r for r in latest_salary}
+        for dept in departments:
+            latest = salary_lookup.get(dept["department_name"])
+            if latest:
+                dept["employee_count"] = latest["employee_count"]
+                dept["total_salary"] = latest["total_salary"]
 
     # Attach cost detail per department
-    detail = _safe_query("""
-        SELECT department_name, tier, source_vendor, amount, reason
+    detail_year_cond = ""
+    if year:
+        detail_year_cond = " WHERE year = $1"
+    detail = _safe_query(f"""
+        SELECT department_name, tier, source_vendor, SUM(amount) AS amount,
+               reason
         FROM department_cost_detail
+        {detail_year_cond}
+        GROUP BY department_name, tier, source_vendor, reason
         ORDER BY department_name, tier, amount DESC
-    """)
+    """, year_params or None)
 
-    # Build detail lookup
     detail_by_dept = {}
     for row in detail:
         dept = row["department_name"]
@@ -91,10 +126,10 @@ def department_true_cost():
         })
 
     for dept in departments:
-        dept["cost_detail"] = detail_by_dept.get(dept["department_name"], [])
+        dept["detail"] = detail_by_dept.get(dept["department_name"], [])
 
-    # Totals across all departments
-    totals = _safe_query("""
+    # Totals
+    totals = _safe_query(f"""
         SELECT SUM(employee_count) AS total_employees,
                SUM(total_salary) AS total_salary,
                SUM(confirmed_payments) AS total_confirmed_payments,
@@ -102,26 +137,34 @@ def department_true_cost():
                SUM(estimated_total) AS total_estimated,
                SUM(total_true_cost) AS grand_total_true_cost
         FROM department_true_cost
-    """)
+        {year_condition}
+    """, year_params or None)
+
+    # Available years
+    available_years = _safe_query(
+        "SELECT DISTINCT year FROM department_true_cost ORDER BY year"
+    )
 
     methodology = (
-        "Department true cost is computed in three tiers: "
-        "(1) Confirmed: payments explicitly tagged with a department in city records, "
-        "plus contract awards from the contracts database. "
+        "Department true cost is computed annually in three tiers: "
+        "(1) Confirmed: payments explicitly tagged with a department in city records. "
         "(2) Attributed: payments to vendors with a known single-department relationship "
         "(e.g., pension funds mapped to Police or Fire), where 90%+ of contract value "
-        "goes to one department. Their untagged (Direct Voucher) payments are attributed "
-        "to that department. "
+        "goes to one department. "
         "(3) Estimated: shared costs (city-wide pension funds, insurance, banking) "
         "allocated proportionally by department headcount. "
-        "Salary data comes from the Chicago Data Portal employee salary dataset "
-        "(current snapshot, not historical)."
+        "Salary data comes from Chicago Budget Ordinance datasets (budgeted positions). "
+        "2026 uses the current employee salary snapshot. "
+        "Contract awards are shown for reference but not year-filtered. "
+        "All payment data is scoped to 2023 and later."
     )
 
     return jsonify({
         "departments": departments,
         "totals": totals[0] if totals else {},
         "methodology": methodology,
+        "available_years": [r["year"] for r in available_years],
+        "selected_year": int(year) if year else None,
     })
 
 

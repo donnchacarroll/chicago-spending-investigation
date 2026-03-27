@@ -94,10 +94,14 @@ function TrueCostView({
   data,
   loading,
   error,
+  selectedYear,
+  onYearChange,
 }: {
   data: TrueCostResponse | null;
   loading: boolean;
   error: string | null;
+  selectedYear: string;
+  onYearChange: (year: string) => void;
 }) {
   const [expandedDept, setExpandedDept] = useState<string | null>(null);
   const [showMethodology, setShowMethodology] = useState(false);
@@ -124,21 +128,55 @@ function TrueCostView({
   const totalPayroll = sorted.reduce((s, d) => s + d.total_salary, 0);
   const maxCost = sorted[0]?.total_true_cost || 1;
 
+  const availableYears = data.available_years || [];
+
   return (
     <div className="space-y-6">
+      {/* Year selector */}
+      {availableYears.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-400">Year:</span>
+          <div className="inline-flex rounded-lg border border-slate-700 overflow-hidden">
+            <button
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                selectedYear === ""
+                  ? "bg-slate-700 text-white"
+                  : "bg-slate-800/50 text-slate-400 hover:text-white"
+              }`}
+              onClick={() => onYearChange("")}
+            >
+              All Years
+            </button>
+            {availableYears.map((y) => (
+              <button
+                key={y}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  selectedYear === String(y)
+                    ? "bg-slate-700 text-white"
+                    : "bg-slate-800/50 text-slate-400 hover:text-white"
+                }`}
+                onClick={() => onYearChange(String(y))}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="card p-4">
           <p className="text-2xl font-bold text-white">{formatCompactCurrency(grandTotal)}</p>
-          <p className="text-xs text-slate-500 mt-1">Total True Cost</p>
+          <p className="text-xs text-slate-500 mt-1">Total True Cost{selectedYear ? ` (${selectedYear})` : " (2023–present)"}</p>
         </div>
         <div className="card p-4">
           <p className="text-2xl font-bold text-emerald-400">{formatCompactCurrency(totalPayroll)}</p>
-          <p className="text-xs text-slate-500 mt-1">Total Payroll</p>
+          <p className="text-xs text-slate-500 mt-1">Budgeted Payroll{selectedYear ? ` (${selectedYear})` : ""}</p>
         </div>
         <div className="card p-4">
           <p className="text-2xl font-bold text-blue-400">{formatNumber(data.totals?.total_employees || 0)}</p>
-          <p className="text-xs text-slate-500 mt-1">Total Employees</p>
+          <p className="text-xs text-slate-500 mt-1">Budgeted Positions</p>
         </div>
         <div className="card p-4">
           <p className="text-2xl font-bold text-slate-200">{sorted.length}</p>
@@ -261,7 +299,9 @@ function TrueCostView({
       {/* Disclaimer */}
       <div className="card p-4 border border-amber-500/20 bg-amber-500/5">
         <p className="text-xs text-amber-400/80">
-          True cost figures combine confirmed data with attributed and estimated allocations. See methodology for details.
+          True cost figures combine confirmed payments with attributed and estimated allocations, computed annually.
+          Salary data from Chicago Budget Ordinance (budgeted positions); 2026 uses current salary snapshot.
+          Use the year selector above to view individual years. Global date filters do not apply to this view.
         </p>
       </div>
 
@@ -294,7 +334,8 @@ function TrueCostView({
               <strong className="text-amber-400">Estimated</strong> -- Proportional allocations of shared costs (e.g., health insurance, utilities) distributed by headcount or other heuristics.
             </div>
             <div className="text-xs text-slate-500 pt-2 border-t border-slate-700/50">
-              Note: Salaries reflect a current snapshot and are not historical. Estimated figures are approximations and should be interpreted with appropriate caution.
+              Note: Salary data from Chicago Budget Ordinance (budgeted positions per year). 2026 uses current employee salary snapshot.
+              All payment data is scoped to 2023 and later. Estimated figures are approximations and should be interpreted with appropriate caution.
             </div>
             {data.methodology && (
               <div className="text-xs text-slate-500 whitespace-pre-wrap">{data.methodology}</div>
@@ -318,7 +359,7 @@ export default function Departments() {
   const [trueCostData, setTrueCostData] = useState<TrueCostResponse | null>(null);
   const [trueCostLoading, setTrueCostLoading] = useState(false);
   const [trueCostError, setTrueCostError] = useState<string | null>(null);
-  const [trueCostLoaded, setTrueCostLoaded] = useState(false);
+  const [trueCostYear, setTrueCostYear] = useState<string>("");
 
   useEffect(() => {
     setLoading(true);
@@ -328,30 +369,38 @@ export default function Departments() {
       .finally(() => setLoading(false));
   }, [dateFilter.startDate, dateFilter.endDate]);
 
+  const fetchTrueCost = (year: string) => {
+    setTrueCostLoading(true);
+    setTrueCostError(null);
+    const params: Record<string, string> = {};
+    if (year) params.year = year;
+    getDepartmentTrueCost(params)
+      .then((res) => setTrueCostData(res))
+      .catch((err) => setTrueCostError(err.message))
+      .finally(() => setTrueCostLoading(false));
+  };
+
   const handleToggleTrueCost = () => {
     if (viewMode === "truecost") {
       setViewMode("payment");
       return;
     }
     setViewMode("truecost");
-    if (!trueCostLoaded) {
-      setTrueCostLoading(true);
-      setTrueCostError(null);
-      getDepartmentTrueCost()
-        .then((res) => {
-          setTrueCostData(res);
-          setTrueCostLoaded(true);
-        })
-        .catch((err) => setTrueCostError(err.message))
-        .finally(() => setTrueCostLoading(false));
+    if (!trueCostData) {
+      fetchTrueCost(trueCostYear);
     }
+  };
+
+  const handleTrueCostYearChange = (year: string) => {
+    setTrueCostYear(year);
+    fetchTrueCost(year);
   };
 
   const handleRowClick = async (row: Department) => {
     if (!row.department_name) return;
     setDetailLoading(true);
     try {
-      const detail = await getDepartmentDetail(row.department_name);
+      const detail = await getDepartmentDetail(row.department_name, applyToParams({}));
       setSelectedDept(detail as unknown as DeptDetail);
     } catch {
       setSelectedDept(null);
@@ -476,7 +525,13 @@ export default function Departments() {
           )}
         </>
       ) : (
-        <TrueCostView data={trueCostData} loading={trueCostLoading} error={trueCostError} />
+        <TrueCostView
+          data={trueCostData}
+          loading={trueCostLoading}
+          error={trueCostError}
+          selectedYear={trueCostYear}
+          onYearChange={handleTrueCostYearChange}
+        />
       )}
 
       {/* Department Detail Modal */}

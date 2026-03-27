@@ -11,6 +11,7 @@ import Categories from "./pages/Categories";
 import Contracts from "./pages/Contracts";
 import Network from "./pages/Network";
 import Donations from "./pages/Donations";
+import Methodology from "./pages/Methodology";
 
 export default function App() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
             <Route path="/contracts" element={<Contracts />} />
             <Route path="/alerts" element={<Alerts />} />
             <Route path="/donations" element={<Donations />} />
+            <Route path="/methodology" element={<Methodology />} />
           </Route>
         </Routes>
       </BrowserRouter>

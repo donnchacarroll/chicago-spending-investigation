@@ -295,8 +295,8 @@ export function getDepartments(params?: Record<string, string>) {
   return fetchApi<DepartmentsResponse>("/departments", params);
 }
 
-export function getDepartmentDetail(name: string) {
-  return fetchApi<DepartmentDetail>(`/departments/${encodeURIComponent(name)}`);
+export function getDepartmentDetail(name: string, params?: Record<string, string>) {
+  return fetchApi<DepartmentDetail>(`/departments/${encodeURIComponent(name)}`, params);
 }
 
 export function getAlerts(params?: Record<string, string>) {
@@ -672,10 +672,12 @@ export interface TrueCostResponse {
     grand_total_true_cost: number;
   };
   methodology: string;
+  available_years: number[];
+  selected_year: number | null;
 }
 
-export function getDepartmentTrueCost() {
-  return fetchApi<TrueCostResponse>("/departments/true-cost");
+export function getDepartmentTrueCost(params?: Record<string, string>) {
+  return fetchApi<TrueCostResponse>("/departments/true-cost", params);
 }
 
 // Donations types
