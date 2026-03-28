@@ -121,6 +121,28 @@ npm run build                         # Production build
 npx tsc --noEmit                      # Type check
 ```
 
+## Testing
+When asked to run tests, run all of these checks:
+```bash
+# 1. Run all backend tests
+source .venv/bin/activate && pytest
+
+# 2. Run with verbose output
+source .venv/bin/activate && pytest -v
+
+# 3. Run a specific test file
+source .venv/bin/activate && pytest backend/tests/test_outliers.py
+
+# 4. TypeScript type check
+cd frontend && npx tsc --noEmit
+
+# 5. Frontend production build
+cd frontend && npm run build
+
+# 6. Python backend import check
+source .venv/bin/activate && python -c "from backend.app import create_app; create_app()"
+```
+
 ## Ports
 - **5001**: Flask API backend
 - **5173**: Vite frontend dev server (proxies `/api` to 5001 in dev mode)
