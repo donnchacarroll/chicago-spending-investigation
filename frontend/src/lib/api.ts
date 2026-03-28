@@ -701,6 +701,7 @@ export interface DonationsSummary {
   vendors_with_donations: number;
   top_donor_vendors: DonorVendor[];
   top_recipients: TopRecipient[];
+  source_breakdown: Array<{ source: string; count: number; total: number }>;
 }
 
 export interface DonationRecord {
