@@ -26,5 +26,8 @@ frontend/dist/
 .idea/
 *.swp
 
+# Worktrees
+.worktrees/
+
 # OS
 .DS_Store
