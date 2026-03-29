@@ -49,7 +49,7 @@ def list_vendors():
     sort_direction = "DESC" if sort_dir != "asc" else "ASC"
 
     params = []
-    where_clause = "WHERE p.is_annual_aggregate = false"
+    where_clause = "WHERE p.is_annual_aggregate = false AND p.is_intergovernmental = false"
     having_clause = ""
 
     if start_date:

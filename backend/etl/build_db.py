@@ -24,7 +24,7 @@ from backend.analysis.splitting import detect_splitting
 from backend.analysis.vendors import analyze_vendors
 from backend.analysis.contracts import analyze_contracts
 from backend.analysis.scoring import compute_risk_scores
-from backend.analysis.categories import CATEGORY_MAP, classify_dv_vendor
+from backend.analysis.categories import CATEGORY_MAP, classify_dv_vendor, is_intergovernmental_vendor
 
 
 def build_database():
@@ -142,6 +142,33 @@ def build_database():
     print(f"    -> DV subcategories:")
     for row in dv_check:
         print(f"       {row[0]:30s} {row[1]:>8,} payments  ${row[2]}B")
+
+    # Flag intergovernmental payments
+    print("  Flagging intergovernmental payments ...")
+    con.execute("ALTER TABLE payment_contract_joined ADD COLUMN is_intergovernmental BOOLEAN DEFAULT false")
+    con.execute("ALTER TABLE payments ADD COLUMN is_intergovernmental BOOLEAN DEFAULT false")
+    all_vendors = con.execute("SELECT DISTINCT vendor_name FROM payment_contract_joined").fetchall()
+    gov_vendors = [row[0] for row in all_vendors if is_intergovernmental_vendor(row[0])]
+    if gov_vendors:
+        gov_cases = []
+        for vendor in gov_vendors:
+            escaped = vendor.replace("'", "''")
+            gov_cases.append(f"WHEN vendor_name = '{escaped}' THEN true")
+        gov_case_expr = " ".join(gov_cases)
+        for table in ("payment_contract_joined", "payments"):
+            con.execute(f"""
+                UPDATE {table}
+                SET is_intergovernmental = CASE
+                    {gov_case_expr}
+                    ELSE false
+                END
+            """)
+    gov_stats = con.execute(
+        "SELECT COUNT(DISTINCT vendor_name) as vendors, COUNT(*) as payments, "
+        "ROUND(SUM(amount)/1e9, 2) as billions "
+        "FROM payment_contract_joined WHERE is_intergovernmental = true AND is_annual_aggregate = false"
+    ).fetchone()
+    print(f"    -> {gov_stats[0]} intergovernmental entities, {gov_stats[1]:,} payments, ${gov_stats[2]}B")
 
     # ── Salary data and department true cost ──────────────────
     print()

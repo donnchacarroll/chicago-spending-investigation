@@ -134,7 +134,7 @@ def overview():
             COALESCE(v.composite_score, 0) AS risk_score
         FROM payments p
         LEFT JOIN vendor_risk_scores v ON p.vendor_name = v.vendor_name
-        WHERE p.is_annual_aggregate = false{date_conditions_p}
+        WHERE p.is_annual_aggregate = false AND p.is_intergovernmental = false{date_conditions_p}
         GROUP BY p.vendor_name, v.composite_score
         ORDER BY total_paid DESC
         LIMIT 20

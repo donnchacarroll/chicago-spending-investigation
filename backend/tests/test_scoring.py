@@ -63,6 +63,17 @@ def test_alerts_vendor_name_populated(test_db):
     assert rows > 0, "At least some alerts should have a vendor_name"
 
 
+def test_vendor_risk_scores_excludes_intergovernmental(test_db):
+    """Intergovernmental vendors should not have risk scores."""
+    rows = test_db.execute(
+        "SELECT vendor_name FROM vendor_risk_scores"
+    ).fetchall()
+    vendor_names = [r[0] for r in rows]
+    assert "COOK COUNTY TREASURER" not in vendor_names
+    assert "STATE OF ILLINOIS TREASURERS OFFICE" not in vendor_names
+    assert "CHICAGO TRANSIT AUTHORITY" not in vendor_names
+
+
 def test_vendor_risk_scores_composite_bounded(test_db):
     """Vendor composite scores should be between 0 and 100."""
     rows = test_db.execute(

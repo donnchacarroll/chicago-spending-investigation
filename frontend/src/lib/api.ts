@@ -760,3 +760,39 @@ export function getVendorDonations(vendorName: string) {
 export function getDonationRedFlags() {
   return fetchApi<RedFlagsResponse>("/donations/red-flags");
 }
+
+// Intergovernmental types
+
+export interface IntergovernmentalRecipient {
+  vendor_name: string;
+  total_paid: number;
+  payment_count: number;
+}
+
+export interface IntergovernmentalSummary {
+  total_spending: number;
+  payment_count: number;
+  top_recipients: IntergovernmentalRecipient[];
+  spending_by_year: Array<{ year: number; total_spending: number; payment_count: number }>;
+  spending_by_department: Array<{ department_name: string; total_spending: number; payment_count: number }>;
+}
+
+export interface IntergovernmentalDetail {
+  vendor_name: string;
+  total_paid: number;
+  payment_count: number;
+  first_payment: string | null;
+  last_payment: string | null;
+  payment_history: Array<{ year: number; month: number; total: number; count: number }>;
+  departments: Array<{ department_name: string; total_paid: number; payment_count: number }>;
+}
+
+// Intergovernmental API functions
+
+export function getIntergovernmentalSummary(params?: Record<string, string>) {
+  return fetchApi<IntergovernmentalSummary>("/intergovernmental", params);
+}
+
+export function getIntergovernmentalDetail(vendorName: string, params?: Record<string, string>) {
+  return fetchApi<IntergovernmentalDetail>(`/intergovernmental/${encodeURIComponent(vendorName)}`, params);
+}

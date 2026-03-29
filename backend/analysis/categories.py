@@ -119,6 +119,39 @@ def classify_dv_vendor(vendor_name: str) -> str:
     return "Other Direct Voucher"
 
 
+INTERGOVERNMENTAL_PATTERNS = [
+    # Prefix matches
+    ("COOK COUNTY", "prefix"),
+    ("STATE OF", "prefix"),
+    ("DEPARTMENT OF", "prefix"),
+    ("CITY OF", "prefix"),
+    ("BOARD OF EDUCATION", "prefix"),
+    ("BOARD OF TRUSTEES", "prefix"),
+    ("METROPOLITAN WATER", "prefix"),
+    # Contains matches
+    ("TRANSIT", "contains"),
+    ("TREASURER", "contains"),
+    ("COLLECTOR", "contains"),
+    ("WATER RECLAMATION", "contains"),
+]
+
+
+def is_intergovernmental_vendor(vendor_name: str) -> bool:
+    """Return True if vendor is a government entity (not a commercial vendor).
+
+    Pension/retirement funds are excluded — they have their own classification.
+    """
+    if classify_dv_vendor(vendor_name) == "Pensions & Retirement":
+        return False
+    upper = vendor_name.upper()
+    for pattern, match_type in INTERGOVERNMENTAL_PATTERNS:
+        if match_type == "prefix" and upper.startswith(pattern):
+            return True
+        if match_type == "contains" and pattern in upper:
+            return True
+    return False
+
+
 def analyze_categories(con) -> dict:
     """Analyze spending by category, procurement type, and contract type.
 

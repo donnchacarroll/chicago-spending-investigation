@@ -156,6 +156,18 @@ def compute_risk_scores(con, all_flags_df: pd.DataFrame) -> dict:
                 flag_count INTEGER
             )
         """)
+    # Remove intergovernmental vendors from risk scores
+    try:
+        con.execute("""
+            DELETE FROM vendor_risk_scores
+            WHERE vendor_name IN (
+                SELECT DISTINCT vendor_name FROM payment_contract_joined
+                WHERE is_intergovernmental = true
+            )
+        """)
+    except Exception:
+        pass  # Column may not exist in older databases
+
     vendors_scored = len(vendor_scores) if not vendor_flags.empty else 0
 
     # --- Department-level scores ---

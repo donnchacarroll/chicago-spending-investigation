@@ -1,6 +1,6 @@
 """Tests for spending categorization."""
 
-from backend.analysis.categories import classify_dv_vendor, analyze_categories
+from backend.analysis.categories import classify_dv_vendor, analyze_categories, is_intergovernmental_vendor
 
 
 def test_classify_dv_vendor_legal():
@@ -40,6 +40,42 @@ def test_classify_dv_vendor_government():
     """Cook County should be classified as Government Transfers."""
     result = classify_dv_vendor("COOK COUNTY TREASURER")
     assert result == "Government Transfers"
+
+
+def test_is_intergovernmental_cook_county():
+    """Cook County Treasurer is an intergovernmental entity."""
+    assert is_intergovernmental_vendor("COOK COUNTY TREASURER") is True
+
+
+def test_is_intergovernmental_state_of_illinois():
+    """State of Illinois is intergovernmental."""
+    assert is_intergovernmental_vendor("STATE OF ILLINOIS TREASURER'S OFFICE") is True
+
+
+def test_is_intergovernmental_cta():
+    """Chicago Transit Authority is intergovernmental."""
+    assert is_intergovernmental_vendor("CHICAGO TRANSIT AUTHORITY") is True
+
+
+def test_is_intergovernmental_board_of_ed():
+    """Board of Education is intergovernmental."""
+    assert is_intergovernmental_vendor("BOARD OF EDUCATION OF THE CITY OF CHICAGO") is True
+
+
+def test_is_intergovernmental_regular_vendor():
+    """Regular commercial vendors are NOT intergovernmental."""
+    assert is_intergovernmental_vendor("ACME CONSTRUCTION LLC") is False
+
+
+def test_is_intergovernmental_pension_excluded():
+    """Pension funds should NOT be flagged as intergovernmental."""
+    assert is_intergovernmental_vendor("MUNICIPAL EMPLOYEE PENSION FD") is False
+
+
+def test_is_intergovernmental_returns_bool():
+    """is_intergovernmental_vendor always returns a bool."""
+    for vendor in ["COOK COUNTY TREASURER", "ACME INC", "STATE OF ILLINOIS"]:
+        assert isinstance(is_intergovernmental_vendor(vendor), bool)
 
 
 def test_analyze_categories_returns_dict(test_db):

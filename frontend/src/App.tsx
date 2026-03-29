@@ -11,6 +11,7 @@ import Categories from "./pages/Categories";
 import Contracts from "./pages/Contracts";
 import Network from "./pages/Network";
 import Donations from "./pages/Donations";
+import Intergovernmental from "./pages/Intergovernmental";
 import Methodology from "./pages/Methodology";
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/payments" element={<Payments />} />
             <Route path="/vendors" element={<Vendors />} />
             <Route path="/network" element={<Network />} />
+            <Route path="/intergovernmental" element={<Intergovernmental />} />
             <Route path="/departments" element={<Departments />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/contracts" element={<Contracts />} />

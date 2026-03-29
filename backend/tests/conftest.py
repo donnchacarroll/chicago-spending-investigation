@@ -95,6 +95,17 @@ def test_db():
             WHERE vendor_name = '{escaped_vendor}' AND contract_type = 'direct_voucher'
         """)
 
+    # --- Flag intergovernmental vendors ---
+    from backend.analysis.categories import is_intergovernmental_vendor
+    con.execute("ALTER TABLE payment_contract_joined ADD COLUMN is_intergovernmental BOOLEAN DEFAULT false")
+    con.execute("ALTER TABLE payments ADD COLUMN is_intergovernmental BOOLEAN DEFAULT false")
+    all_vendors = con.execute("SELECT DISTINCT vendor_name FROM payment_contract_joined").fetchall()
+    gov_vendors = [v for (v,) in all_vendors if is_intergovernmental_vendor(v)]
+    if gov_vendors:
+        placeholders = ", ".join(f"'{v.replace(chr(39), chr(39)+chr(39))}'" for v in gov_vendors)
+        for table in ("payment_contract_joined", "payments"):
+            con.execute(f"UPDATE {table} SET is_intergovernmental = true WHERE vendor_name IN ({placeholders})")
+
     # --- Compute total_paid_per_contract and overspend_ratio ---
     con.execute("ALTER TABLE payment_contract_joined ADD COLUMN total_paid_per_contract DOUBLE")
     con.execute("""

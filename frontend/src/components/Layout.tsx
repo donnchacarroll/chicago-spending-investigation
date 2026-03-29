@@ -7,6 +7,7 @@ const navItems = [
   { to: "/payments", label: "Payments", icon: CreditCardIcon },
   { to: "/vendors", label: "Vendors", icon: BuildingIcon },
   { to: "/network", label: "Network", icon: NetworkIcon },
+  { to: "/intergovernmental", label: "Gov Transfers", icon: GovTransfersIcon },
   { to: "/departments", label: "Departments", icon: OrgIcon },
   { to: "/categories", label: "Categories", icon: TagIcon },
   { to: "/contracts", label: "Contracts", icon: DocumentIcon },
@@ -224,6 +225,14 @@ function DonationsIcon() {
   return (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
+function GovTransfersIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.205l3 1m1.5.5l-1.5-.5M6.75 7.364V3h-3v18m3-13.636l10.5-3.819" />
     </svg>
   );
 }

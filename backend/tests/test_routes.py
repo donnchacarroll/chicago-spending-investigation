@@ -11,6 +11,15 @@ class TestOverviewRoutes:
         assert "total_spending" in data
         assert "total_payments" in data
 
+    def test_overview_top_vendors_excludes_intergovernmental(self, client):
+        resp = client.get("/api/overview/")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        vendor_names = [v["vendor_name"] for v in data["top_vendors"]]
+        assert "COOK COUNTY TREASURER" not in vendor_names
+        assert "STATE OF ILLINOIS TREASURERS OFFICE" not in vendor_names
+        assert "CHICAGO TRANSIT AUTHORITY" not in vendor_names
+
 
 class TestPaymentRoutes:
     def test_payments_list(self, client):
@@ -35,6 +44,14 @@ class TestVendorRoutes:
         data = resp.get_json()
         assert "vendors" in data
         assert "total" in data
+
+    def test_vendors_list_excludes_intergovernmental(self, client):
+        resp = client.get("/api/vendors/")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        vendor_names = [v["vendor_name"] for v in data["vendors"]]
+        assert "COOK COUNTY TREASURER" not in vendor_names
+        assert "STATE OF ILLINOIS TREASURERS OFFICE" not in vendor_names
 
     def test_vendor_detail(self, client):
         resp = client.get("/api/vendors/EXTREME_VENDOR_LLC")
@@ -149,6 +166,33 @@ class TestNetworkRoutes:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "address_clusters" in data
+
+
+class TestIntergovernmentalRoutes:
+    def test_intergovernmental_summary(self, client):
+        resp = client.get("/api/intergovernmental/")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "total_spending" in data
+        assert "payment_count" in data
+        assert "top_recipients" in data
+        assert data["total_spending"] > 0
+        assert data["payment_count"] > 0
+
+    def test_intergovernmental_top_recipients_are_gov_entities(self, client):
+        resp = client.get("/api/intergovernmental/")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        recipient_names = [r["vendor_name"] for r in data["top_recipients"]]
+        assert "COOK COUNTY TREASURER" in recipient_names
+
+    def test_intergovernmental_detail(self, client):
+        resp = client.get("/api/intergovernmental/COOK%20COUNTY%20TREASURER")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "total_paid" in data
+        assert "payment_count" in data
+        assert data["total_paid"] > 0
 
 
 class TestDonationRoutes:
